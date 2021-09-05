@@ -10,24 +10,34 @@
 
 namespace mod {
 
-uint8_t Reader::convertS8ToU8(uint8_t value) {
-  constexpr uint8_t halfByte = 128;
+float Reader::convertFromU8(const uint8_t *value) {
+  constexpr int maxSignedByte = 0x80 - 1;
+  constexpr float maxSignedByteFloat = 0x80 - 1;
 
-  int8_t signedByte = *((int8_t *)&value);
-
-  signedByte += halfByte;
-
-  return *((uint8_t *)&signedByte);
+  return (float)((int)(*value) - maxSignedByte) / maxSignedByteFloat;
 }
 
-uint16_t Reader::convertS8ToU16(uint8_t value) {
-  uint16_t converted = convertS8ToU8(value);
+float Reader::convertFromS8(const uint8_t *value) {
+  constexpr float maxSignedByte = 0x80;
 
-  return converted << 8;
+  return (float)(*(int8_t *)value) / maxSignedByte;
 }
 
-int16_t Reader::convertS8ToS16(uint8_t value) {
-  return (int16_t)(*(int8_t *)&value) * (int16_t)0x100;
+float Reader::convertFromU16(const uint8_t *value) {
+  constexpr int maxSigned16 = 0x8000;
+  constexpr float maxSigned16Float = 0x8000;
+
+  const int unsignedValue = *(uint16_t *)value;
+
+  return (float)(unsignedValue - maxSigned16) / maxSigned16Float;
+}
+
+float Reader::convertFromS16(const uint8_t *value) {
+  constexpr float maxSigned16Float = 0x8000;
+
+  const int signedValue = *(int16_t *)value;
+
+  return (float)(signedValue) / maxSigned16Float;
 }
 
 size_t Reader::getChannels(std::ifstream &stream) {
@@ -47,7 +57,7 @@ size_t Reader::getChannels(std::ifstream &stream) {
     throw std::runtime_error("File stream gone bad.");
   }
 
-  if (type == "M.K.") {
+  if (type == "M.K." || type == "FLT4") {
     return 4;
   } else if (type == "6CHN") {
     return 6;
@@ -66,7 +76,7 @@ size_t Reader::getChannels(std::ifstream &stream) {
   throw std::runtime_error(fmt::format("Unknown mod type format: '{}'", type));
 }
 
-std::vector<Sample> Reader::readSamples(std::ifstream &stream, Encoding audioDataEncoding) {
+std::vector<Sample> Reader::readSamples(std::ifstream &stream) {
   if (!stream) {
     throw std::runtime_error("Samples reading error: stream bad.");
   }
@@ -77,11 +87,9 @@ std::vector<Sample> Reader::readSamples(std::ifstream &stream, Encoding audioDat
   samples.reserve(samplesTotal);
 
   for (int i = 0; i < samplesTotal; i++) {
-    Sample sample = Serializer::sample(stream, audioDataEncoding);
+    Sample sample = Serializer::sample(stream);
 
-    if (sample.getLength() != 0) {
-      samples.push_back(sample);
-    }
+    samples.push_back(sample);
   }
 
   return samples;
@@ -114,47 +122,38 @@ void Reader::readSamplesAudioData(std::ifstream &stream,
     throw std::runtime_error("Sample audio data reading error: stream bad.");
   }
 
+  float (*convertor)(const uint8_t *);
+
+  if (audioDataEncoding == Encoding::Signed8) {
+    convertor = &Reader::convertFromS8;
+  } else if (audioDataEncoding == Encoding::Unsigned8) {
+    convertor = &Reader::convertFromU8;
+  } else if (audioDataEncoding == Encoding::Signed16) {
+    convertor = &Reader::convertFromS16;
+  } else if (audioDataEncoding == Encoding::Unsigned16) {
+    convertor = &Reader::convertFromU16;
+  } else {
+    throw std::invalid_argument(
+        "readSamplesAudioData: unknown audio data encoding: " +
+        encodingToString(audioDataEncoding));
+  }
+
   for (auto &sample : samples) {
     sample.reserveData();
 
-    if (audioDataEncoding == Encoding::Signed8) {
-      std::vector<uint8_t> &sampleData = sample.getData();
+    std::vector<uint8_t> readData(sample.getLength());
 
-      stream.read((char *)sampleData.data(), sample.getLength());
-    } else {
-      std::vector<uint8_t> readData(sample.getLength());
-
-      stream.read((char *)readData.data(), sample.getLength());
-
-      std::vector<uint8_t> &sampleData = sample.getData();
-
-      size_t index = 0;
-      for (auto byteRead : readData) {
-        if (audioDataEncoding == Encoding::Unsigned8) {
-          sampleData[index] = Reader::convertS8ToU8(byteRead);
-
-          index++;
-        } else if (audioDataEncoding == Encoding::Unsigned16) {
-          uint16_t converted = Reader::convertS8ToU16(byteRead);
-
-          sampleData[index] = ((uint8_t *)&converted)[0];
-          sampleData[index+1] = ((uint8_t *)&converted)[1];
-
-          index += 2;
-        } else if (audioDataEncoding == Encoding::Signed16) {
-          int16_t converted = Reader::convertS8ToS16(byteRead);
-
-          sampleData[index] = ((uint8_t *)&converted)[0];
-          sampleData[index+1] = ((uint8_t *)&converted)[1];
-
-          index += 2;
-        }
-      }
-    }
+    stream.read((char *)readData.data(), sample.getLength());
 
     if (!stream) {
       throw std::runtime_error(
           "Sample audio data reading error: stream gone bad.");
+    }
+
+    std::vector<float> &sampleData = sample.getData();
+
+    for (auto i = 0; i < sample.getLength(); i++) {
+      sampleData[i] = convertor(&readData[i]);
     }
   }
 }
@@ -203,7 +202,7 @@ std::string Reader::readName(std::ifstream &stream) {
   return name;
 }
 
-Mod Reader::read(const std::string &path, Encoding encoding) {
+Mod Reader::read(const std::string &path) {
   std::ifstream stream(path);
 
   if (!stream) {
@@ -211,7 +210,7 @@ Mod Reader::read(const std::string &path, Encoding encoding) {
   }
 
   std::string name = Reader::readName(stream);
-  std::vector<Sample> samples = Reader::readSamples(stream, encoding);
+  std::vector<Sample> samples = Reader::readSamples(stream);
 
   uint8_t byte;
 
@@ -232,14 +231,14 @@ Mod Reader::read(const std::string &path, Encoding encoding) {
       patternsCount = order;
     }
   }
-//  patternsCount++;
+  patternsCount++;
 
   std::vector<Pattern> patterns = Reader::readPatterns(stream, patternsCount);
 
-  Reader::readSamplesAudioData(stream, samples, encoding);
+  Reader::readSamplesAudioData(stream, samples, Encoding::Signed8);
 
-  return Mod(name, songLength, encoding, std::move(samples),
-             std::move(patterns), std::move(orders));
+  return Mod(name, songLength, std::move(samples), std::move(patterns),
+             std::move(orders));
 }
 
 }  // namespace mod

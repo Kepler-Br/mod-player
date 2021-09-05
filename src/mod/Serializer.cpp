@@ -9,7 +9,7 @@ namespace mod {
 const size_t Serializer::noteDataSize = 4;
 
 uint16_t Serializer::swapEndian(uint16_t val) {
-  return (val << 8) | (val & 0xF);
+  return (val >> 8) | (val << 8);
 }
 
 uint16_t Serializer::readU16(std::istream &stream) {
@@ -59,7 +59,7 @@ Note Serializer::note(std::istream &stream) {
 
   Note outNote{};
 
-  outNote.sampleNumber = sampleNumber;
+  outNote.sampleIndex = sampleNumber;
   outNote.samplePeriodFrequency = samplePeriodFrequency;
   outNote.effectNumber = effectNumber;
   outNote.effectParameter = effectParameter;
@@ -100,7 +100,7 @@ Pattern Serializer::pattern(std::istream &stream, size_t channels,
   return outPattern;
 }
 
-Sample Serializer::sample(std::istream &stream, Encoding audioDataEncoding) {
+Sample Serializer::sample(std::istream &stream) {
   if (!stream) {
     throw std::runtime_error("Cannot serialize sample: stream bad");
   }
@@ -122,14 +122,17 @@ Sample Serializer::sample(std::istream &stream, Encoding audioDataEncoding) {
   repeatPoint *= 2;
 
   int repeatLength = Serializer::readU16Big(stream);
-  repeatLength *= 2;
+  if (repeatLength == 1) {
+    repeatLength = 0;
+  } else {
+    repeatLength *= 2;
+  }
 
   if (!stream) {
     throw std::runtime_error("Cannot serialize sample: stream gone bad");
   }
 
-  return {sampleName,  length,       finetune,         volume,
-          repeatPoint, repeatLength, audioDataEncoding};
+  return {sampleName, length, finetune, volume, repeatPoint, repeatLength};
 }
 
 }  // namespace mod

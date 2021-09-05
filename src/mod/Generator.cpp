@@ -1,11 +1,59 @@
 #include "Generator.h"
 
+#include <fmt/format.h>
+
+#include <bitset>
 #include <iostream>
 #include <sstream>
 
 #include "InfoString.h"
 
 namespace mod {
+
+void Generator::convertToU8(const float &value, uint8_t *target) {
+  constexpr int maxSigned = 0x80 - 1;
+  constexpr float maxSignedFloat = 0x80 - 1;
+
+  *target = (uint8_t)((int)(value * maxSignedFloat) + maxSigned);
+}
+
+void Generator::convertToS8(const float &value, uint8_t *target) {
+  constexpr float maxSignedFloat = 0x80 - 1;
+
+  *(uint8_t *)target = (int8_t)((int)(value * maxSignedFloat));
+}
+
+void Generator::convertToU16(const float &value, uint8_t *target) {
+  constexpr int maxSigned16 = 0x8000 - 1;
+  constexpr float maxSigned16Float = 0x8000 - 1;
+
+  *(uint16_t *)target =
+      (uint16_t)((int)(value * maxSigned16Float) + maxSigned16);
+}
+
+void Generator::convertToS16(const float &value, uint8_t *target) {
+  constexpr float maxSigned16Float = 0x8000 - 1;
+
+  *(uint16_t *)target = (int16_t)((int)(value * maxSigned16Float));
+}
+
+void Generator::mix(const float &src, float &dest) {
+  //  dest = src + dest;
+  //
+  //  if (dest > 1.0f) {
+  //    dest = 1.0f;
+  //  }
+  //  if (dest < -1.0f) {
+  //    dest = -1.0f;
+  //  }
+
+  //  dest = (src + dest) - src * dest * std::signum(src + dest)
+  const float sum = src + dest;
+
+  dest =
+      (sum)-src * dest * ((sum > 0.0f) ? 1.0f : ((sum < 0.0f) ? -1.0f : 0.0f));
+  //  dest = sum;
+}
 
 bool Generator::advanceIndexes() {
   if (this->_generatorState == GeneratorState::Paused) {
@@ -15,7 +63,7 @@ bool Generator::advanceIndexes() {
   const std::vector<Pattern> &patterns = this->_mod.getPatterns();
   const std::vector<int> &orders = this->_mod.getOrders();
 
-  if (this->_currentOrderIndex > this->_mod.getSongLength()) {
+  if (this->_currentOrderIndex >= this->_mod.getSongLength()) {
     return true;
   }
 
@@ -28,7 +76,7 @@ bool Generator::advanceIndexes() {
     this->_currentRowIndex = 0;
     this->_currentOrderIndex++;
 
-    if (this->_currentOrderIndex > this->_mod.getSongLength()) {
+    if (this->_currentOrderIndex >= this->_mod.getSongLength()) {
       return true;
     }
   }
@@ -79,7 +127,7 @@ std::string Generator::fancyRow(const Row &row) const {
 
   stringstream << "|";
   for (const auto &note : row.getNotes()) {
-    if (note.sampleNumber == 0) {
+    if (note.sampleIndex == 0) {
       stringstream << ".....|";
       continue;
     }
@@ -93,62 +141,94 @@ std::string Generator::fancyRow(const Row &row) const {
     }
 
     stringstream << noteString;
-    stringstream << "." << note.sampleNumber;
+    stringstream << "." << note.sampleIndex;
     stringstream << "|";
   }
   return stringstream.str();
 }
 
-void Generator::generateByChannel(uint8_t *data, size_t size, const Row &row, size_t channelIndex) {
+void Generator::generateByChannel(std::vector<float> &data, size_t start,
+                                  size_t end, const Row &row,
+                                  size_t channelIndex) {
   const Note &note = row.getNote(channelIndex);
+  ChannelState &channelState = this->_channelsStates[channelIndex];
 
-  if (note.sampleNumber != 0) {
-    this->_perChannelTime[channelIndex] = 0;
-    this->_previousSampleIndex[channelIndex] = note.sampleNumber;
+  if (note.sampleIndex != 0 && !this->_rowPlayed) {
+    channelState = {};
+    channelState.sampleIndex = note.sampleIndex;
+    if (note.samplePeriodFrequency == 0) {
+      channelState.pitch = 1.0f;
+    } else {
+      channelState.pitch = 7093789.2f /
+                           ((float)(note.samplePeriodFrequency) * 2.0f) /
+                           (11025.0f * 2.0f);
+    }
   }
 
-  //  std::cout << note.sampleNumber << std::endl;
+  const auto &sampleIndex = channelState.sampleIndex;
 
-  if (this->_previousSampleIndex[channelIndex] != 0) {
-    const auto &sampleIndex = this->_previousSampleIndex[channelIndex];
-    const Sample &sample = this->_mod.getSamples()[sampleIndex];
-    //    const Sample &sample = this->_mod.getSamples()[0];
-    const auto &sampleTime = this->_perChannelTime[channelIndex];
+  if (sampleIndex == 0) {
+    return;
+  }
 
-    const std::vector<uint8_t> &sampleData = sample.getData();
-    for (auto i = 0; i < size; i++) {
-      if ((sampleTime + i) < sampleData.size()) {
-        data[i] = sampleData[sampleTime + i];
+  const Sample &sample = this->_mod.getSamples()[sampleIndex - 1];
+  auto &sampleTime = channelState.sampleTime;
+  const std::vector<float> &sampleData = sample.getData();
+
+  size_t dataIndex2 = 0;
+
+  if (note.effectNumber == 0xC) {
+    channelState.volume = (float)note.effectParameter / 64.0f;
+  }
+
+  float sampleVolume = (float)sample.getVolume() / 64.0f * channelState.volume;
+
+  for (auto i = start; i < end; i++) {
+    size_t sampleDataIndex =
+        sampleTime + (size_t)((float)dataIndex2 * channelState.pitch);
+
+    if (sampleDataIndex >= sampleData.size()) {
+      if (sample.getRepeatLength() == 0) {
+        channelState = {};
+        break;
+      } else {
+        channelState.sampleTime = sample.getRepeatPoint();
+        // Todo
+        dataIndex2 = 0;
+        sampleDataIndex =
+            sampleTime + (size_t)((float)dataIndex2 * channelState.pitch);
       }
     }
 
-    if (sampleTime + size >= sampleData.size()) {
-      this->_previousSampleIndex[channelIndex] = 0;
-      this->_perChannelTime[channelIndex] = 0;
-    }
-  } else {
-    for (auto i = 0; i < size; i++) {
-      data[i] = 0x80;
-    }
+
+    data[i] += sampleData[sampleDataIndex] * sampleVolume / 4;
+
+    dataIndex2++;
   }
 
-  this->_perChannelTime[channelIndex] += size;
+  if (sampleIndex == 0) {
+    return;
+  }
+
+  //    sampleTime += sampleTimeIncrement;
+  sampleTime += (size_t)((float)dataIndex2 * channelState.pitch);
+
+  //  this->_perChannelTime[channelIndex] += data.size();
 }
 
-Generator::Generator(Mod mod) : _mod(std::move(mod)) {
-  this->_perChannelTime.resize(this->_mod.getChannels());
-  this->_previousSampleIndex.resize(this->_mod.getChannels());
+Generator::Generator(Mod mod, Encoding audioDataEncoding)
+    : _mod(std::move(mod)), _audioDataEncoding(audioDataEncoding) {
+  this->_channelsStates.resize(this->_mod.getChannels());
+  this->_mutedChannels.resize(this->_mod.getChannels(), false);
+
+  this->setEncoding(audioDataEncoding);
 }
 
 void Generator::setMod(Mod mod) {
-  if (mod.getAudioDataEncoding() == Encoding::Unknown) {
-    throw std::invalid_argument("Mod with invalid encoding: " +
-                                encodingToString(mod.getAudioDataEncoding()));
-  }
-
   this->_mod = std::move(mod);
-  this->_perChannelTime.resize(this->_mod.getChannels());
-  this->_previousSampleIndex.resize(this->_mod.getChannels());
+  this->_channelsStates.resize(this->_mod.getChannels());
+
+  this->resetState();
 }
 
 void Generator::stop() {
@@ -156,34 +236,87 @@ void Generator::stop() {
   this->_currentRowIndex = 0;
   this->_timePassed = 0;
   this->_generatorState = GeneratorState::Paused;
+  this->_rowPlayed = false;
 }
 
-void Generator::generate(uint8_t *data, size_t size) {
-  if (this->_mod.getAudioDataEncoding() == Encoding::Unknown ||
-      this->_generatorState == GeneratorState::Paused) {
+void Generator::restart() {
+  this->stop();
+  this->start();
+}
+
+void Generator::pause() { this->_generatorState = GeneratorState::Paused; }
+
+void Generator::start() { this->_generatorState = GeneratorState::Playing; }
+
+void Generator::generate(uint8_t *data, size_t size, float volume) {
+  if (this->_convertor == nullptr) {
+    throw std::logic_error("generate: Audio encoding was not set.");
+  }
+
+  if (this->_generatorState == GeneratorState::Paused) {
     return;
   }
 
-  const std::vector<Pattern> &patterns = this->_mod.getPatterns();
-  const std::vector<int> &orders = this->_mod.getOrders();
+  if (this->_buffer.size() != (size / this->_bytesInEncoding)) {
+    this->_buffer.resize(size / this->_bytesInEncoding);
+  }
 
-  int currentOrder = orders[this->_currentOrderIndex];
-  const Pattern &currentPattern = patterns[currentOrder];
+  for (size_t current = 0; current < size;) {
+    size_t next = std::min(current + this->_timePerRow, size);
 
-  const Row &currentRow = currentPattern.getRow(this->_currentRowIndex);
+    const std::vector<Pattern> &patterns = this->_mod.getPatterns();
+    const std::vector<int> &orders = this->_mod.getOrders();
 
-  this->generateByChannel(data, size, currentRow, 1);
+    int currentOrder = orders[this->_currentOrderIndex];
+    const Pattern &currentPattern = patterns[currentOrder];
 
-  if (((this->_timePassed % this->_timePerRow) + size + 1) >
-      this->_timePerRow) {
-    std::cout << this->fancyRow(currentRow) << std::endl;
-    if (this->advanceIndexes()) {
-      this->stop();
-      return;
+    const Row &currentRow = currentPattern.getRow(this->_currentRowIndex);
+
+    if (!this->_rowPlayed) {
+      for (const auto &note : currentRow.getNotes()) {
+        if (note.effectNumber == 0xF) {
+          this->_timePerRow = 440 * note.effectParameter;
+        }
+      }
+    }
+
+    for (auto channelIndex = 0; channelIndex < this->_mod.getChannels();
+         channelIndex++) {
+      if (this->_mutedChannels[channelIndex]) {
+        continue;
+      }
+
+      this->generateByChannel(this->_buffer, current, next, currentRow,
+                              channelIndex);
+    }
+
+    this->_rowPlayed = true;
+
+    current = next;
+
+    if (((this->_timePassed % this->_timePerRow) + current) >=
+        this->_timePerRow) {
+      this->_rowPlayed = false;
+      std::cout << this->fancyRow(currentRow) << std::endl;
+      if (this->advanceIndexes()) {
+        this->stop();
+        break;
+      }
     }
   }
 
+  uint8_t *dataPtr = data;
+  for (float &i : this->_buffer) {
+    this->_convertor(i * volume, dataPtr);
+    dataPtr += this->_bytesInEncoding;
+  }
+
   this->_timePassed += size;
+
+  std::memset(this->_buffer.data(), 0, this->_buffer.size() * sizeof(float));
+
+//  size_t byteCount = ((char *)&this->_buffer[this->_buffer.size() - 1] - (char *)&this->_buffer[0]);
+
 
 
   //  std::cout << "Passed: " << this->_timePassed
@@ -197,6 +330,135 @@ void Generator::generate(uint8_t *data, size_t size) {
   //            << std::endl;
 }
 
+void Generator::setEncoding(Encoding audioDataEncoding) {
+  switch (audioDataEncoding) {
+    case Encoding::Signed16:
+      this->_convertor = &Generator::convertToS16;
+      this->_bytesInEncoding = bytesInEncoding(audioDataEncoding);
+      break;
+    case Encoding::Unsigned16:
+      this->_convertor = &Generator::convertToU16;
+      this->_bytesInEncoding = bytesInEncoding(audioDataEncoding);
+      break;
+    case Encoding::Signed8:
+      this->_convertor = &Generator::convertToS8;
+      this->_bytesInEncoding = bytesInEncoding(audioDataEncoding);
+      break;
+    case Encoding::Unsigned8:
+      this->_convertor = &Generator::convertToU8;
+      this->_bytesInEncoding = bytesInEncoding(audioDataEncoding);
+      break;
+    default:
+      throw std::invalid_argument("setEncoding: unknown encoding: " +
+                                  encodingToString(audioDataEncoding));
+  }
+
+  this->_audioDataEncoding = audioDataEncoding;
+}
+
+Encoding Generator::getAudioDataEncoding() const {
+  return this->_audioDataEncoding;
+}
+
 GeneratorState Generator::getState() const { return this->_generatorState; }
+
+void Generator::setCurrentOrder(size_t index) {
+  if (index >= this->_mod.getOrders().size()) {
+    const std::string message = fmt::format(
+        "setCurrentOrder: Tried to set order out of range: {}. Total orders: "
+        "{}",
+        index, this->_mod.getOrders().size());
+
+    throw std::out_of_range(message);
+  }
+
+  this->resetState();
+  this->_currentOrderIndex = index;
+}
+
+void Generator::setCurrentRow(size_t index) {
+  const auto &patternIndex = this->_mod.getOrders()[this->_currentOrderIndex];
+  const auto &pattern = this->_mod.getPatterns()[patternIndex];
+
+  if (index >= pattern.getTotalRows()) {
+    const std::string message = fmt::format(
+        "setCurrentRow: Tried to set row out of range: {}. Total rows: "
+        "{}",
+        index, pattern.getTotalRows());
+
+    throw std::out_of_range(message);
+  }
+
+  this->resetState();
+  this->_currentRowIndex = index;
+}
+
+void Generator::solo(size_t channelIndex) {
+  if (channelIndex >= this->_mutedChannels.size()) {
+    const std::string message = fmt::format(
+        "solo: Tried to set channel solo out of range: {}. Total channels: "
+        "{}",
+        channelIndex, this->_mutedChannels.size());
+
+    throw std::out_of_range(message);
+  }
+
+  for (auto &&b : this->_mutedChannels) {
+    b = true;
+  }
+
+  this->_mutedChannels[channelIndex] = false;
+}
+
+void Generator::unmute(size_t channelIndex) {
+  if (channelIndex >= this->_mutedChannels.size()) {
+    const std::string message = fmt::format(
+        "unmute: Tried to set channel unmute out of range: {}. Total channels: "
+        "{}",
+        channelIndex, this->_mutedChannels.size());
+
+    throw std::out_of_range(message);
+  }
+
+  this->_mutedChannels[channelIndex] = false;
+}
+
+void Generator::mute(size_t channelIndex) {
+  if (channelIndex >= this->_mutedChannels.size()) {
+    const std::string message = fmt::format(
+        "mute: Tried to set channel mute out of range: {}. Total channels: "
+        "{}",
+        channelIndex, this->_mutedChannels.size());
+
+    throw std::out_of_range(message);
+  }
+
+  this->_mutedChannels[channelIndex] = true;
+}
+
+void Generator::unmuteAll() {
+  for (auto &&b : this->_mutedChannels) {
+    b = false;
+  }
+}
+
+void Generator::muteAll() {
+  for (auto &&b : this->_mutedChannels) {
+    b = true;
+  }
+}
+
+bool Generator::isMuted(size_t channelIndex) {
+  if (channelIndex >= this->_mutedChannels.size()) {
+    const std::string message = fmt::format(
+        "mute: Tried to set channel mute out of range: {}. Total channels: "
+        "{}",
+        channelIndex, this->_mutedChannels.size());
+
+    throw std::out_of_range(message);
+  }
+
+  return this->_mutedChannels[channelIndex];
+}
 
 }  // namespace mod

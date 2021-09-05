@@ -58,7 +58,7 @@ class Serializer {
    * @throw std::runtime_error
    * @return
    */
-  static Sample sample(std::istream &stream, Encoding audioDataEncoding);
+  static Sample sample(std::istream &stream);
 };
 
 }  // namespace mod

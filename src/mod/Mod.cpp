@@ -4,21 +4,16 @@
 
 namespace mod {
 
-Mod::Mod(std::string name, size_t songLength, Encoding audioDataEncoding,
+Mod::Mod(std::string name, size_t songLength,
          std::vector<Sample> samples, std::vector<Pattern> patterns,
          std::vector<int> orders)
     : _name(std::move(name)),
       _songLength(songLength),
-      _audioDataEncoding(audioDataEncoding),
       _samples(std::move(samples)),
       _patterns(std::move(patterns)),
       _orders(std::move(orders)) {
   if (!this->_patterns.empty()) {
     this->_channels = this->_patterns[0].getChannels();
-  }
-  if (this->_audioDataEncoding == Encoding::Unknown) {
-    throw std::invalid_argument("Mod initialization: invalid encoding: " +
-                                encodingToString(this->_audioDataEncoding));
   }
 }
 
@@ -48,5 +43,4 @@ const std::vector<Pattern>& Mod::getPatterns() const {
 
 const std::string& Mod::getName() const { return this->_name; }
 
-Encoding Mod::getAudioDataEncoding() const { return this->_audioDataEncoding; }
 }  // namespace mod

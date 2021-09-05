@@ -12,9 +12,10 @@ namespace mod {
 
 class Reader {
  private:
-  static float convertS8ToU8(uint8_t value);
-  static float convertS8ToU16(uint8_t value);
-  static float convertS8ToS16(uint8_t value);
+  static float convertFromU8(const uint8_t *value);
+  static float convertFromS8(const uint8_t *value);
+  static float convertFromU16(const uint8_t *value);
+  static float convertFromS16(const uint8_t *value);
 
   /**
    * @param stream
@@ -26,7 +27,7 @@ class Reader {
    * @param stream
    * @throw std::runtime_error
    */
-  [[nodiscard]] static std::vector<Sample> readSamples(std::ifstream &stream, Encoding audioDataEncoding);
+  [[nodiscard]] static std::vector<Sample> readSamples(std::ifstream &stream);
   /**
    * @param stream
    * @throw std::runtime_error
@@ -36,6 +37,7 @@ class Reader {
   /**
    * @param stream
    * @throw std::runtime_error
+   * @throw std::invalid_argument
    */
   static void readSamplesAudioData(std::ifstream &stream,
                                    std::vector<Sample> &samples, Encoding audioDataEncoding);
@@ -53,7 +55,7 @@ class Reader {
  public:
   Reader() = delete;
 
-  static Mod read(const std::string &path, Encoding encoding);
+  static Mod read(const std::string &path);
 };
 
 }  // namespace mod

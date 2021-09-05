@@ -16,13 +16,11 @@ class Sample {
   int _volume;
   int _repeatPoint;
   int _repeatLength;
-  std::vector<uint8_t> _data;
-  Encoding _dataEncoding;
-  size_t _expectedDataLength;
+  std::vector<float> _data;
 
  public:
   Sample(std::string name, int length, int finetune, int volume,
-         int repeatPoint, int repeatLength, Encoding dataEncoding);
+         int repeatPoint, int repeatLength);
 
   [[nodiscard]] const std::string &getName() const;
   [[nodiscard]] int getLength() const;
@@ -35,20 +33,18 @@ class Sample {
    * @throw std::runtime_error
    * @return
    */
-  [[nodiscard]] std::vector<uint8_t> &getData();
+  [[nodiscard]] std::vector<float> &getData();
 
   /**
    * @throw std::runtime_error
    * @return
    */
-  [[nodiscard]] const std::vector<uint8_t> &getData() const;
+  [[nodiscard]] const std::vector<float> &getData() const;
   /**
    * @param data
    * @throw std::runtime_error
    */
-  void setData(const std::vector<uint8_t> &data);
-
-  Encoding getDataEncoding() const;
+  void setData(const std::vector<float> &data);
 };
 
 }  // namespace mod

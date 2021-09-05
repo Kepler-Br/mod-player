@@ -14,14 +14,13 @@ class Mod {
   std::string _name;
   size_t _songLength = 0;
   size_t _channels = 0;
-  Encoding _audioDataEncoding = Encoding::Unknown;
 
   std::vector<Sample> _samples;
   std::vector<Pattern> _patterns;
   std::vector<int> _orders;
 
  public:
-  Mod(std::string name, size_t songLength, Encoding audioDataEncoding,
+  Mod(std::string name, size_t songLength,
       std::vector<Sample> samples, std::vector<Pattern> patterns,
       std::vector<int> orders);
 
@@ -48,8 +47,6 @@ class Mod {
   [[nodiscard]] const std::vector<Pattern> &getPatterns() const;
 
   [[nodiscard]] const std::string &getName() const;
-
-  Encoding getAudioDataEncoding() const;
 };
 
 }  // namespace mod

@@ -1,5 +1,7 @@
 #include "Row.h"
 
+#include <fmt/format.h>
+
 #include <stdexcept>
 #include <string>
 
@@ -23,10 +25,11 @@ void Row::addNote(const Note& note) {
 
 const std::vector<Note>& Row::getNotes() const { return this->_notes; }
 
-const Note &Row::getNote(size_t index) const {
+const Note& Row::getNote(size_t index) const {
   if (index >= this->_channels) {
-    const std::string message = "Tried access not existing channel. Channels: " +
-                                std::to_string(this->_channels);
+    const std::string message =
+        fmt::format("Tried access not existing channel {}. Total channels: {}",
+                    index, this->_channels);
 
     throw std::out_of_range(message);
   }

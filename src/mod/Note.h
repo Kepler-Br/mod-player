@@ -3,7 +3,7 @@
 namespace mod {
 
 struct Note {
-  int sampleNumber;
+  int sampleIndex;
   int samplePeriodFrequency;
   int effectNumber;
   int effectParameter;

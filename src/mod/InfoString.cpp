@@ -9,7 +9,7 @@ std::string InfoString::toString(const Note& note) {
       "Effect parameter: {}\nEffect number: {}\n"
       "Sample period frequency: {}\nSample number: {}",
       note.effectParameter, note.effectNumber, note.samplePeriodFrequency,
-      note.sampleNumber);
+      note.sampleIndex);
 }
 
 std::string InfoString::toString(const Row& row) {
