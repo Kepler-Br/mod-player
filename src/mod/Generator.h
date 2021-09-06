@@ -54,8 +54,6 @@ class Generator {
    */
   bool advanceIndexes();
 
-  std::string fancyRow(const Row &row) const;
-
   void generateByChannel(std::vector<float> &data, size_t start, size_t end,
                          const Row &row, size_t channelIndex);
 

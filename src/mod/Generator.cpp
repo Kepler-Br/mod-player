@@ -84,69 +84,6 @@ bool Generator::advanceIndexes() {
   return false;
 }
 
-std::string intToNote(int i) {
-  switch (i) {
-    case 0:
-      return "C-";
-    case 1:
-      return "C#";
-    case 2:
-      return "D-";
-    case 3:
-      return "D#";
-    case 4:
-      return "E-";
-    case 5:
-      return "F-";
-    case 6:
-      return "F#";
-    case 7:
-      return "G-";
-    case 8:
-      return "G#";
-    case 9:
-      return "A-";
-    case 10:
-      return "A#";
-    case 11:
-      return "B-";
-    default:
-      return "??";
-  }
-}
-
-std::string Generator::fancyRow(const Row &row) const {
-  constexpr size_t totalNotes = 12;
-  std::stringstream stringstream;
-  static const int originalPeriods[] = {
-      1712, 1616, 1524, 1440, 1356, 1280, 1208, 1140, 1076, 1016, 960, 906,
-      856,  808,  762,  720,  678,  640,  604,  570,  538,  508,  480, 453,
-      428,  404,  381,  360,  339,  320,  302,  285,  269,  254,  240, 226,
-      214,  202,  190,  180,  170,  160,  151,  143,  135,  127,  120, 113,
-      107,  101,  95,   90,   85,   80,   75,   71,   67,   63,   60,  56};
-
-  stringstream << "|";
-  for (const auto &note : row.getNotes()) {
-    if (note.sampleIndex == 0) {
-      stringstream << ".....|";
-      continue;
-    }
-
-    std::string noteString = "??";
-    for (size_t i = 0; i < sizeof(originalPeriods); i++) {
-      if (originalPeriods[i] == note.samplePeriodFrequency) {
-        noteString = intToNote(i % totalNotes) + (char)('0' + (i / 12) + 2);
-        break;
-      }
-    }
-
-    stringstream << noteString;
-    stringstream << "." << note.sampleIndex;
-    stringstream << "|";
-  }
-  return stringstream.str();
-}
-
 void Generator::generateByChannel(std::vector<float> &data, size_t start,
                                   size_t end, const Row &row,
                                   size_t channelIndex) {
@@ -297,7 +234,7 @@ void Generator::generate(uint8_t *data, size_t size, float volume) {
     if (((this->_timePassed % this->_timePerRow) + current) >=
         this->_timePerRow) {
       this->_rowPlayed = false;
-      std::cout << this->fancyRow(currentRow) << std::endl;
+      std::cout << InfoString::fancyRow(currentRow) << std::endl;
       if (this->advanceIndexes()) {
         this->stop();
         break;

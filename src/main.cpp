@@ -1,15 +1,16 @@
 #include <SDL.h>
-#include "mod/writer/RawWriter.h"
-#include "mod/writer/WavWriter.h"
 
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <vector>
 
 #include "fmt/format.h"
 #include "mod/Generator.h"
 #include "mod/InfoString.h"
 #include "mod/Reader.h"
+#include "mod/writer/RawWriter.h"
+#include "mod/writer/WavWriter.h"
 
 extern void fill_audio(void *udata, Uint8 *stream, int len);
 
@@ -20,7 +21,7 @@ bool initAudio(void *userdata) {
   wanted.freq = 11025*2;
   wanted.format = AUDIO_U8;
   wanted.channels = 1;   /* 1 = mono, 2 = stereo */
-  wanted.samples = 440 * 7; /* Good low-latency value for callback */
+  wanted.samples = 440*4; /* Good low-latency value for callback */
   wanted.callback = fill_audio;
   wanted.userdata = userdata;
 
@@ -30,18 +31,6 @@ bool initAudio(void *userdata) {
     return false;
   }
   return true;
-}
-
-float convertFromS8(const uint8_t *value) {
-  constexpr float maxSignedByte = 0x80;
-
-  return (float)(*(int8_t *)value) / maxSignedByte;
-}
-
-void convertToS8(const float &value, uint8_t *target) {
-  constexpr float maxSignedFloat = 0x80 - 1;
-
-  *(int8_t *)target = (int8_t)((int)(value * maxSignedFloat));
 }
 
 int main() {
@@ -62,7 +51,7 @@ int main() {
 //            << "Restored: " << (int)restored << "\n";
 
 
-  mod::Mod serializedMod = mod::Reader::read("slyhome.mod");
+  mod::Mod serializedMod = mod::Reader::read("melnorm.mod");
 
   std::cout << mod::InfoString::toString(serializedMod) << "\n";
 
