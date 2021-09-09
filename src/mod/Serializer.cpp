@@ -1,6 +1,6 @@
 #include "Serializer.h"
 
-#include <string>
+#include <array>
 
 #include "fmt/format.h"
 
@@ -35,26 +35,25 @@ uint8_t Serializer::readU8(std::istream &stream) {
 }
 
 Note Serializer::note(std::istream &stream) {
-  uint8_t data[noteDataSize];
+  std::array<uint8_t, noteDataSize> data{};
 
   if (!stream) {
     throw std::runtime_error("Cannot serialize note: stream bad");
   }
 
-  stream.read((char *)data, noteDataSize);
+  stream.read((char *)data.data(), data.size());
 
   if (!stream) {
-    const std::string message =
-        "Cannot serialize note: stream gone bad after trying to read " +
-        std::to_string(noteDataSize) + " bytes";
-    throw std::runtime_error(fmt::format(
+    const std::string message = fmt::format(
         "Cannot serialize note: stream gone bad after trying to read {} bytes",
-        noteDataSize));
+        noteDataSize);
+
+    throw std::runtime_error(message);
   }
 
   int sampleNumber = (data[0] & 0xF0) | (data[2] >> 4);
-  int samplePeriodFrequency = (((int)data[0] & 0x0F) << 8) | data[1];
-  int effectNumber = (data[2] & 0x0F);
+  int samplePeriodFrequency = ((data[0] & 0xF) << 8) | data[1];
+  int effectNumber = (data[2] & 0xF);
   int effectParameter = data[3];
 
   Note outNote{};
@@ -132,7 +131,7 @@ Sample Serializer::sample(std::istream &stream) {
     throw std::runtime_error("Cannot serialize sample: stream gone bad");
   }
 
-  return {sampleName, length, finetune, volume, repeatPoint, repeatLength};
+  return {sampleName, length, finetune, volume, repeatPoint, repeatLength, 8363.0f};
 }
 
 }  // namespace mod

@@ -20,7 +20,7 @@ void Generator::convertToU8(const float &value, uint8_t *target) {
 void Generator::convertToS8(const float &value, uint8_t *target) {
   constexpr float maxSignedFloat = 0x80 - 1;
 
-  *(uint8_t *)target = (int8_t)((int)(value * maxSignedFloat));
+  *(int8_t *)target = (int8_t)((int)(value * maxSignedFloat));
 }
 
 void Generator::convertToU16(const float &value, uint8_t *target) {
@@ -34,7 +34,7 @@ void Generator::convertToU16(const float &value, uint8_t *target) {
 void Generator::convertToS16(const float &value, uint8_t *target) {
   constexpr float maxSigned16Float = 0x8000 - 1;
 
-  *(uint16_t *)target = (int16_t)((int)(value * maxSigned16Float));
+  *(int16_t *)target = (int16_t)((int)(value * maxSigned16Float));
 }
 
 void Generator::mix(const float &src, float &dest) {
@@ -98,7 +98,7 @@ void Generator::generateByChannel(std::vector<float> &data, size_t start,
     } else {
       channelState.pitch = 7093789.2f /
                            ((float)(note.samplePeriodFrequency) * 2.0f) /
-                           (11025.0f * 2.0f);
+                           (this->_frequency);
     }
   }
 
@@ -109,7 +109,6 @@ void Generator::generateByChannel(std::vector<float> &data, size_t start,
   }
 
   const Sample &sample = this->_mod.getSamples()[sampleIndex - 1];
-  auto &sampleTime = channelState.sampleTime;
   const std::vector<float> &sampleData = sample.getData();
 
   size_t dataIndex2 = 0;
@@ -121,24 +120,22 @@ void Generator::generateByChannel(std::vector<float> &data, size_t start,
   float sampleVolume = (float)sample.getVolume() / 64.0f * channelState.volume;
 
   for (auto i = start; i < end; i++) {
-    size_t sampleDataIndex =
-        sampleTime + (size_t)((float)dataIndex2 * channelState.pitch);
+    auto sampleDataIndex =
+        (size_t)(channelState.sampleTime + (float)dataIndex2 * channelState.pitch);
 
     if (sampleDataIndex >= sampleData.size()) {
       if (sample.getRepeatLength() == 0) {
         channelState = {};
         break;
       } else {
-        channelState.sampleTime = sample.getRepeatPoint();
+        channelState.sampleTime = (float)sample.getRepeatPoint();
         // Todo
         dataIndex2 = 0;
-        sampleDataIndex =
-            sampleTime + (size_t)((float)dataIndex2 * channelState.pitch);
+        sampleDataIndex = (size_t)(channelState.sampleTime + (float)dataIndex2 * channelState.pitch);
       }
     }
 
-
-    data[i] += sampleData[sampleDataIndex] * sampleVolume / 4;
+    data[i] += sampleData[sampleDataIndex] * sampleVolume / (float)this->_mod.getChannels();
 
     dataIndex2++;
   }
@@ -147,10 +144,7 @@ void Generator::generateByChannel(std::vector<float> &data, size_t start,
     return;
   }
 
-  //    sampleTime += sampleTimeIncrement;
-  sampleTime += (size_t)((float)dataIndex2 * channelState.pitch);
-
-  //  this->_perChannelTime[channelIndex] += data.size();
+  channelState.sampleTime += (float)dataIndex2 * channelState.pitch;
 }
 
 Generator::Generator(Mod mod, Encoding audioDataEncoding)
@@ -159,6 +153,17 @@ Generator::Generator(Mod mod, Encoding audioDataEncoding)
   this->_mutedChannels.resize(this->_mod.getChannels(), false);
 
   this->setEncoding(audioDataEncoding);
+}
+
+void Generator::setVolume(float volume) { this->_volume = volume; }
+
+void Generator::setFrequency(float frequency) {
+  if (frequency <= 0.0f) {
+    throw std::invalid_argument(
+        fmt::format("Frequency cannot be less than 0. Have {}", frequency));
+  }
+
+  this->_frequency = frequency;
 }
 
 void Generator::setMod(Mod mod) {
@@ -185,12 +190,16 @@ void Generator::pause() { this->_generatorState = GeneratorState::Paused; }
 
 void Generator::start() { this->_generatorState = GeneratorState::Playing; }
 
-void Generator::generate(uint8_t *data, size_t size, float volume) {
+void Generator::generate(uint8_t *data, size_t size) {
   if (this->_convertor == nullptr) {
     throw std::logic_error("generate: Audio encoding was not set.");
   }
 
   if (this->_generatorState == GeneratorState::Paused) {
+    for (uint8_t *ptr = data; ptr < (data + size);
+         ptr += this->_bytesInEncoding) {
+      this->_convertor(0.0f, ptr);
+    }
     return;
   }
 
@@ -198,8 +207,12 @@ void Generator::generate(uint8_t *data, size_t size, float volume) {
     this->_buffer.resize(size / this->_bytesInEncoding);
   }
 
-  for (size_t current = 0; current < size;) {
-    size_t next = std::min(current + this->_timePerRow, size);
+  for (size_t current = 0; current < this->_buffer.size();) {
+    //        size_t next = std::min(current + this->_timePerRow,
+    //        this->_buffer.size());
+    size_t next =
+        std::min(this->_timePerRow - this->_timePassed % this->_timePerRow,
+                 this->_buffer.size());
 
     const std::vector<Pattern> &patterns = this->_mod.getPatterns();
     const std::vector<int> &orders = this->_mod.getOrders();
@@ -229,10 +242,15 @@ void Generator::generate(uint8_t *data, size_t size, float volume) {
 
     this->_rowPlayed = true;
 
-    current = next;
-
-    if (((this->_timePassed % this->_timePerRow) + current) >=
-        this->_timePerRow) {
+    if ((this->_timePassed % this->_timePerRow) + (next - current) >= this->_timePerRow) {
+      //    if (next >= this->_timePerRow) {
+      //        if (next >=
+      //            this->_timePerRow) {
+      auto message = fmt::format("{} : {} : {} ; {} < {}", this->_timePerRow,
+                                 this->_timePassed % this->_timePerRow,
+                                 this->_timePassed % this->_timePerRow + (next - current),
+                                 next, current);
+      std::cout << message << std::endl;
       this->_rowPlayed = false;
       std::cout << InfoString::fancyRow(currentRow) << std::endl;
       if (this->advanceIndexes()) {
@@ -240,21 +258,22 @@ void Generator::generate(uint8_t *data, size_t size, float volume) {
         break;
       }
     }
+    this->_timePassed += next - current;
+
+    current = next;
   }
 
   uint8_t *dataPtr = data;
-  for (float &i : this->_buffer) {
-    this->_convertor(i * volume, dataPtr);
+  for (const float &i : this->_buffer) {
+    this->_convertor(std::min(1.0f, std::max(-1.0f, i * this->_volume)),
+                     dataPtr);
     dataPtr += this->_bytesInEncoding;
   }
 
-  this->_timePassed += size;
-
   std::memset(this->_buffer.data(), 0, this->_buffer.size() * sizeof(float));
 
-//  size_t byteCount = ((char *)&this->_buffer[this->_buffer.size() - 1] - (char *)&this->_buffer[0]);
-
-
+  //  size_t byteCount = ((char *)&this->_buffer[this->_buffer.size() - 1] -
+  //  (char *)&this->_buffer[0]);
 
   //  std::cout << "Passed: " << this->_timePassed
   //            << "; Wrapped: " << (this->_timePassed % this->_timePerRow)

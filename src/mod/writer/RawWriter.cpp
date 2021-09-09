@@ -8,7 +8,7 @@ void RawWriter::write(Generator& generator, std::ostream& stream) {
   std::vector<uint8_t> buffer(256);
 
   while(generator.getState() != GeneratorState::Paused) {
-    generator.generate(buffer.data(), buffer.size(), 1.0f);
+    generator.generate(buffer.data(), buffer.size());
 
     stream.write((char *)buffer.data(), (std::streamsize)buffer.size());
   }

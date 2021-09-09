@@ -19,9 +19,11 @@ bool initAudio(void *userdata) {
 
   /* Set the audio format */
   wanted.freq = 11025*2;
-  wanted.format = AUDIO_U8;
+//  wanted.freq = 10000;
+  wanted.format = AUDIO_S16;
   wanted.channels = 1;   /* 1 = mono, 2 = stereo */
-  wanted.samples = 440*4; /* Good low-latency value for callback */
+  wanted.samples = 440; /* Good low-latency value for callback */
+  wanted.samples = 1024; /* Good low-latency value for callback */
   wanted.callback = fill_audio;
   wanted.userdata = userdata;
 
@@ -34,28 +36,14 @@ bool initAudio(void *userdata) {
 }
 
 int main() {
-//  int8_t original = -123;
-//  float toFloat = convertFromS8((const uint8_t *)&original);
-//  int8_t restored;
-//  convertToS8(toFloat, (uint8_t *)&restored);
-//
-//  std::cout << "Original: " << (int)original << "\n"
-//            << "To float: " << toFloat << "\n"
-//            << "Restored: " << (int)restored << "\n";
-//
-//  original = -123/2;
-//  toFloat = convertFromS8((const uint8_t *)&original);
-//  convertToS8(toFloat, (uint8_t *)&restored);
-//  std::cout << "Original: " << (int)original << "\n"
-//            << "To float: " << toFloat << "\n"
-//            << "Restored: " << (int)restored << "\n";
-
-
-  mod::Mod serializedMod = mod::Reader::read("melnorm.mod");
+  mod::Mod serializedMod =
+    mod::Reader::read("ignore-mods/spathi.mod");
 
   std::cout << mod::InfoString::toString(serializedMod) << "\n";
 
-  mod::Generator generator(std::move(serializedMod), mod::Encoding::Unsigned8);
+  mod::Generator generator(std::move(serializedMod), mod::Encoding::Signed16);
+  generator.setFrequency(11025*2);
+  generator.setVolume(0.5f);
 
 //  generator.setCurrentOrder(0);
 //  generator.setCurrentRow(0x35);
@@ -82,53 +70,15 @@ int main() {
 
   SDL_PauseAudio(0);
   while (generator.getState() == mod::GeneratorState::Playing) {
-    SDL_Delay(3000);
+    SDL_Delay(1000);
   }
   SDL_CloseAudio();
 
   return 0;
 }
 
-// void fill_audio(void *udata, Uint8 *stream, int len) {
-//     static float counter = 1.0f;
-//
-//     for (int i = 0; i < len; i++) {
-//         float someSin = std::cos(counter);
-//
-//         stream[i] = (Uint8)((someSin + 1.0f) / 2.0f * 80.0f);
-//         counter += M_PI_4 / 18.0f;
-//     }
-// }
-
 void fill_audio(void *udata, Uint8 *stream, int len) {
-  static size_t counter = 0;
-  static size_t sampleIndex = 0;
-
   auto &generator = *(mod::Generator *)udata;
-  //  mod::Sample &sample = samples[sampleIndex];
-  //  std::vector<uint8_t> &data = sample.getData();
 
-  generator.generate(stream, len, 1.0f);
-  //  for (int i = 0; i < len; i++) {
-  //    //    float processed = 0.0f;
-  //
-  ////    if (counter >= data.size()) {
-  ////      counter = 0;
-  ////      sampleIndex++;
-  ////      sampleIndex = sampleIndex % samples.size();
-  ////      sample = samples[sampleIndex % samples.size()];
-  ////      data = sample.getData();
-  ////    }
-  //
-  //    //    if (counter < data.size()) {
-  //    //    processed = (float)data[counter % data.size()];
-  //    //    }
-  //    if (sampleIndex < samples.size()) {
-  //      stream[i] = (Uint8)data[counter];
-  //    } else {
-  //      stream[i] = 0x80;
-  //    }
-  //
-  //    counter++;
-  //  }
+  generator.generate(stream, len);
 }

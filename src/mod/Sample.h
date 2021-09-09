@@ -16,11 +16,22 @@ class Sample {
   int _volume;
   int _repeatPoint;
   int _repeatLength;
+  float _dataFrequency;
   std::vector<float> _data;
 
  public:
+  /**
+   * @throws std::illegal_argument
+   * @param name
+   * @param length
+   * @param finetune
+   * @param volume
+   * @param repeatPoint
+   * @param repeatLength
+   * @param dataFrequency
+   */
   Sample(std::string name, int length, int finetune, int volume,
-         int repeatPoint, int repeatLength);
+         int repeatPoint, int repeatLength, float dataFrequency);
 
   [[nodiscard]] const std::string &getName() const;
   [[nodiscard]] int getLength() const;
@@ -45,6 +56,10 @@ class Sample {
    * @throw std::runtime_error
    */
   void setData(const std::vector<float> &data);
+
+  float getDataFrequency() const {
+    return this->_dataFrequency;
+  }
 };
 
 }  // namespace mod

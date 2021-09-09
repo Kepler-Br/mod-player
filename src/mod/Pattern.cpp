@@ -1,4 +1,5 @@
 #include "Pattern.h"
+#include <string>
 
 namespace mod {
 

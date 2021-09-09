@@ -75,7 +75,7 @@ class WavWriter : public ModWriter {
     std::vector<uint8_t> buffer(440 * 6);
 
     while(generator.getState() != GeneratorState::Paused) {
-      generator.generate(buffer.data(), buffer.size(), 1.0f);
+      generator.generate(buffer.data(), buffer.size());
 
       stream.write((char *)buffer.data(), (std::streamsize)buffer.size());
     }

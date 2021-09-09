@@ -12,8 +12,8 @@ enum class GeneratorState {
 class Generator {
  private:
   struct ChannelState {
-    size_t sampleTime = 0;
     size_t sampleIndex = 0;
+    float sampleTime = 0.0f;
     float volume = 1.0f;
     float pitch = 1.0f;
   };
@@ -35,6 +35,8 @@ class Generator {
   size_t _currentOrderIndex = 0;
   size_t _currentRowIndex = 0;
   size_t _bytesInEncoding = 1;
+  float _volume = 1.0f;
+  float _frequency = 22050.0f;
 
   GeneratorState _generatorState = GeneratorState::Playing;
   Encoding _audioDataEncoding = Encoding::Unknown;
@@ -73,6 +75,14 @@ class Generator {
 
   Generator() = default;
 
+  void setVolume(float volume);
+
+  /**
+   * @throws std::invalid_argument
+   * @param frequency
+   */
+  void setFrequency(float frequency);
+
   void setMod(Mod mod);
 
   void stop();
@@ -85,7 +95,7 @@ class Generator {
    * @param size
    * @throw std::logic_error
    */
-  void generate(uint8_t *data, size_t size, float volume);
+  void generate(uint8_t *data, size_t size);
 
   /**
    * @param audioDataEncoding

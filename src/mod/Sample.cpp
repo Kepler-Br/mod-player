@@ -7,13 +7,18 @@
 namespace mod {
 
 Sample::Sample(std::string name, int length, int finetune, int volume,
-               int repeatPoint, int repeatLength)
+               int repeatPoint, int repeatLength, float dataFrequency)
     : _name(std::move(name)),
       _length(length),
       _finetune(finetune),
       _volume(volume),
       _repeatPoint(repeatPoint),
-      _repeatLength(repeatLength) {
+      _repeatLength(repeatLength),
+      _dataFrequency(dataFrequency) {
+  if (this->_dataFrequency <= 0.0f) {
+    throw std::invalid_argument(fmt::format(
+        "Frequency cannot be less than 0. Have {}", this->_dataFrequency));
+  }
 }
 
 const std::string& Sample::getName() const { return this->_name; }

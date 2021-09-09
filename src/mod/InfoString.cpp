@@ -105,7 +105,6 @@ std::string InfoString::fancyRow(const Row& row) {
     size_t notVisibleSymbols = 0;
 
     std::streampos cur = stringstream.tellp();
-//    stringstream << background.brightWhite;
     stringstream << colors.brightWhite;
     notVisibleSymbols += colors.brightWhite.size();
     stringstream << noteString;
@@ -126,7 +125,7 @@ std::string InfoString::fancyRow(const Row& row) {
     std::hex(stringstream);
 
     if (note.effectNumber != 0x0) {
-      stringstream << note.effectParameter;
+      stringstream << note.effectNumber;
     } else {
       stringstream << ".";
     }
