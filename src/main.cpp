@@ -1,6 +1,7 @@
 #include <SDL.h>
 
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <vector>
@@ -19,7 +20,8 @@ bool initAudio(void *userdata) {
   SDL_AudioSpec wanted;
 
   /* Set the audio format */
-  wanted.freq = 11025 * 1.0f;
+  wanted.freq = 11025 * 2.0f;
+//  wanted.freq = 8353;
   wanted.format = AUDIO_S8;
   wanted.channels = 1;   /* 1 = mono, 2 = stereo */
   wanted.samples = 1024; /* Good low-latency value for callback */
@@ -39,9 +41,9 @@ void setCallbacks(mod::Generator &generator) {
       [](mod::Generator &generator, size_t oldIndex, size_t newIndex) {
         const mod::Row &currentRow = generator.getCurrentRow();
 
-        std::cout << std::setfill('0') << std::setw(2) << std::hex << newIndex
-                  << std::dec << " ";
-        std::cout << mod::InfoString::fancyRow(currentRow) << std::endl;
+//        std::cout << std::setfill('0') << std::setw(2) << std::hex << newIndex
+//                  << std::dec << " ";
+//        std::cout << mod::InfoString::fancyRow(currentRow) << std::endl;
       });
 
   generator.setNextOrderCallback(
@@ -68,7 +70,10 @@ int main() {
   std::cout << mod::InfoString::toString(serializedMod) << "\n";
 
   mod::Generator generator(std::move(serializedMod), mod::Encoding::Signed8);
-  generator.setFrequency(11025 * 2.0f);
+  generator.setFrequency(11025.0f * 2.0f);
+//  generator.setFrequency(8363.0f);
+//  generator.setFrequency(8550.0f);
+//  generator.setFrequency(8353.0f);
   generator.setVolume(0.7f);
 
   setCallbacks(generator);
@@ -105,4 +110,9 @@ void fill_audio(void *udata, Uint8 *stream, int len) {
   auto &generator = *(mod::Generator *)udata;
 
   generator.generate(stream, len);
+//  for (int i = 0; i < len; i++) {
+//    if (stream[i] != (uint8_t)63) {
+//      std::cout << "Index: " << i << "; Len: " << len << "; Value: " << (int)(stream[i]) << "\n";
+//    }
+//  }
 }

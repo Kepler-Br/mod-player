@@ -2,6 +2,8 @@
 
 #include <fmt/format.h>
 
+#include <iostream>
+
 namespace mod {
 
 void Generator::convertToU8(const float &value, uint8_t *target) {
@@ -141,6 +143,9 @@ void Generator::setFrequency(float frequency) {
         fmt::format("Frequency cannot be less than 0. Have {}", frequency));
   }
 
+  this->_timePerRow = (size_t)(440.0f * 6.0f / (11025 * 2.0f) * frequency);
+  //  this->_timePerRow = frequency;
+
   this->_frequency = frequency;
 }
 
@@ -188,9 +193,22 @@ void Generator::generate(uint8_t *data, size_t size) {
   for (size_t current = 0; current < this->_buffer.size();) {
     //        size_t next = std::min(current + this->_timePerRow,
     //        this->_buffer.size());
-    size_t next =
-        std::min(this->_timePerRow - this->_timePassed % this->_timePerRow,
-                 this->_buffer.size());
+
+    //    if (this->_timePerRow == this->_buffer.size() - 1) {
+    //      next = this->_buffer.size();
+    //      std::cout << "shit:(\n";
+    //    }
+    //    std::cout << "Current: " << current << "; Next: " << next
+    //              << "; Buffer: " << this->_buffer.size()
+    //              << "; Time per row: " << this->_timePerRow
+    //              << "; Time passed: " << this->_timePassed << "\n";
+    size_t next;
+    if (this->_timePassed % this->_timePerRow == 0) {
+      next = std::min(current + this->_timePerRow, this->_buffer.size());
+    } else {
+      next = std::min(this->_timePerRow - this->_timePassed % this->_timePerRow,
+                      this->_buffer.size());
+    }
 
     const std::vector<Pattern> &patterns = this->_mod.getPatterns();
     const std::vector<int> &orders = this->_mod.getOrders();
@@ -237,6 +255,8 @@ void Generator::generate(uint8_t *data, size_t size) {
   for (const float &i : this->_buffer) {
     this->_convertor(std::min(1.0f, std::max(-1.0f, i * this->_volume)),
                      dataPtr);
+    //    this->_convertor(0.5f,
+    //                     dataPtr);
     dataPtr += this->_bytesInEncoding;
   }
 
