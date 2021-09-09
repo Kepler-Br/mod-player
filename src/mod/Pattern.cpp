@@ -40,7 +40,21 @@ const Row& Pattern::getRow(size_t index) const {
   return this->_rows[index];
 }
 
+Row& Pattern::getRow(size_t index) {
+  if (index >= this->_rows.size()) {
+    const std::string message =
+        "Out of range: " + std::to_string(index) + " out of " +
+        std::to_string(this->_rows.size()) + " possible.";
+
+    throw std::out_of_range(message);
+  }
+
+  return this->_rows[index];
+}
+
 const std::vector<Row>& Pattern::getRows() const { return this->_rows; }
+
+std::vector<Row>& Pattern::getRows() { return this->_rows; }
 
 size_t Pattern::getChannels() const { return this->_channels; }
 

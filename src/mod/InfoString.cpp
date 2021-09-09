@@ -1,5 +1,6 @@
 #include "InfoString.h"
 
+#include <iomanip>
 #include <sstream>
 
 #include "fmt/format.h"
@@ -102,27 +103,26 @@ std::string InfoString::fancyRow(const Row& row) {
         break;
       }
     }
-    size_t notVisibleSymbols = 0;
+//    size_t notVisibleSymbols = 0;
 
     std::streampos cur = stringstream.tellp();
     stringstream << colors.brightWhite;
-    notVisibleSymbols += colors.brightWhite.size();
+//    notVisibleSymbols += colors.brightWhite.size();
     stringstream << noteString;
 
     stringstream << colors.blue;
-    notVisibleSymbols += colors.blue.size();
-    if (note.sampleIndex < 10) {
-      stringstream << '.';
-    }
+//    notVisibleSymbols += colors.blue.size();
+    stringstream << std::setfill('0') << std::setw(2);
     stringstream << note.sampleIndex;
 
     stringstream << colors.green;
-    notVisibleSymbols += colors.green.size();
+//    notVisibleSymbols += colors.green.size();
     stringstream << "..";
 
     stringstream << colors.magenta;
-    notVisibleSymbols += colors.magenta.size();
-    std::hex(stringstream);
+//    notVisibleSymbols += colors.magenta.size();
+//    stringstream << std::hex << std::setfill('.') << std::setw(2);
+    stringstream << std::hex;
 
     if (note.effectNumber != 0x0) {
       stringstream << note.effectNumber;
@@ -131,21 +131,19 @@ std::string InfoString::fancyRow(const Row& row) {
     }
 
     stringstream << colors.yellow;
-    notVisibleSymbols += colors.yellow.size();
+//    notVisibleSymbols += colors.yellow.size();
 
     if (note.effectParameter != 0x0) {
-      if (note.effectParameter <= 0xF) {
-        stringstream << "0";
-      }
+      stringstream << std::hex << std::setfill('0') << std::setw(2);
       stringstream << note.effectParameter;
     } else {
       stringstream << "..";
     }
 
-    std::dec(stringstream);
+    stringstream << std::dec;
 
     stringstream << colors.reset;
-    notVisibleSymbols += colors.reset.size();
+//    notVisibleSymbols += colors.reset.size();
     std::size_t written = stringstream.tellp() - cur;
     if (written <= filler.size()) {
       stringstream << std::string(filler.size() - written, '.');

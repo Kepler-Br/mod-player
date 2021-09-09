@@ -31,7 +31,17 @@ class Pattern {
    */
   [[nodiscard]] const Row &getRow(size_t index) const;
 
+  /**
+   *
+   * @param index
+   * @throw std::out_of_range
+   * @return
+   */
+  Row &getRow(size_t index);
+
   [[nodiscard]] const std::vector<Row> &getRows() const;
+
+  std::vector<Row> &getRows();
 
   [[nodiscard]] size_t getChannels() const;
 

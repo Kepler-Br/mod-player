@@ -9,6 +9,7 @@
 #include "mod/Generator.h"
 #include "mod/InfoString.h"
 #include "mod/Reader.h"
+#include "mod/Row.h"
 #include "mod/writer/RawWriter.h"
 #include "mod/writer/WavWriter.h"
 
@@ -18,11 +19,9 @@ bool initAudio(void *userdata) {
   SDL_AudioSpec wanted;
 
   /* Set the audio format */
-  wanted.freq = 11025*2;
-//  wanted.freq = 10000;
-  wanted.format = AUDIO_S16;
+  wanted.freq = 11025 * 1.0f;
+  wanted.format = AUDIO_S8;
   wanted.channels = 1;   /* 1 = mono, 2 = stereo */
-  wanted.samples = 440; /* Good low-latency value for callback */
   wanted.samples = 1024; /* Good low-latency value for callback */
   wanted.callback = fill_audio;
   wanted.userdata = userdata;
@@ -35,34 +34,59 @@ bool initAudio(void *userdata) {
   return true;
 }
 
+void setCallbacks(mod::Generator &generator) {
+  generator.setNextRowCallback(
+      [](mod::Generator &generator, size_t oldIndex, size_t newIndex) {
+        const mod::Row &currentRow = generator.getCurrentRow();
+
+        std::cout << std::setfill('0') << std::setw(2) << std::hex << newIndex
+                  << std::dec << " ";
+        std::cout << mod::InfoString::fancyRow(currentRow) << std::endl;
+      });
+
+  generator.setNextOrderCallback(
+      [](mod::Generator &generator, size_t oldOrderIndex, size_t newOrderIndex,
+         size_t oldPatternIndex, size_t newPatternIndex) {
+        std::cout << "Pattern: " << newPatternIndex
+                  << "; Order: " << newOrderIndex << std::endl;
+      });
+
+  generator.setStateChangedCallback([](mod::Generator &generator,
+                                       mod::GeneratorState oldState,
+                                       mod::GeneratorState newState) {
+    if (newState == mod::GeneratorState::Playing) {
+      std::cout << "Playing\n";
+    } else if (newState == mod::GeneratorState::Paused) {
+      std::cout << "Paused\n";
+    }
+  });
+}
+
 int main() {
-  mod::Mod serializedMod =
-    mod::Reader::read("ignore-mods/spathi.mod");
+  mod::Mod serializedMod = mod::Reader::read("ignore-mods/shofixt.mod");
 
   std::cout << mod::InfoString::toString(serializedMod) << "\n";
 
-  mod::Generator generator(std::move(serializedMod), mod::Encoding::Signed16);
-  generator.setFrequency(11025*2);
-  generator.setVolume(0.5f);
+  mod::Generator generator(std::move(serializedMod), mod::Encoding::Signed8);
+  generator.setFrequency(11025 * 2.0f);
+  generator.setVolume(0.7f);
 
-//  generator.setCurrentOrder(0);
-//  generator.setCurrentRow(0x35);
-//  generator.solo(3);
-//  generator.solo(2);
+  setCallbacks(generator);
 
+  generator.start();
 
+  //  generator.setCurrentOrder(0);
+  //  generator.setCurrentRow(0x35);
+  //  generator.solo(3);
+  //  generator.solo(2);
 
-
-//  mod::WavWriter writer;
-//
-//  std::ofstream stream("output.wav");
-//
-//  writer.write(generator, stream);
-//
-//  stream.close();
-
-
-
+  //  mod::WavWriter writer;
+  //
+  //  std::ofstream stream("output.wav");
+  //
+  //  writer.write(generator, stream);
+  //
+  //  stream.close();
 
   if (!initAudio(&generator)) {
     return -1;

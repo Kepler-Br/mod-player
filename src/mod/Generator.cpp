@@ -2,12 +2,6 @@
 
 #include <fmt/format.h>
 
-#include <bitset>
-#include <iostream>
-#include <sstream>
-
-#include "InfoString.h"
-
 namespace mod {
 
 void Generator::convertToU8(const float &value, uint8_t *target) {
@@ -37,24 +31,6 @@ void Generator::convertToS16(const float &value, uint8_t *target) {
   *(int16_t *)target = (int16_t)((int)(value * maxSigned16Float));
 }
 
-void Generator::mix(const float &src, float &dest) {
-  //  dest = src + dest;
-  //
-  //  if (dest > 1.0f) {
-  //    dest = 1.0f;
-  //  }
-  //  if (dest < -1.0f) {
-  //    dest = -1.0f;
-  //  }
-
-  //  dest = (src + dest) - src * dest * std::signum(src + dest)
-  const float sum = src + dest;
-
-  dest =
-      (sum)-src * dest * ((sum > 0.0f) ? 1.0f : ((sum < 0.0f) ? -1.0f : 0.0f));
-  //  dest = sum;
-}
-
 bool Generator::advanceIndexes() {
   if (this->_generatorState == GeneratorState::Paused) {
     return false;
@@ -70,15 +46,15 @@ bool Generator::advanceIndexes() {
   int currentOrder = orders[this->_currentOrderIndex];
   const Pattern *currentPattern = &patterns[currentOrder];
 
-  this->_currentRowIndex++;
-
-  if (this->_currentRowIndex >= currentPattern->getTotalRows()) {
-    this->_currentRowIndex = 0;
-    this->_currentOrderIndex++;
-
-    if (this->_currentOrderIndex >= this->_mod.getSongLength()) {
+  if (this->_currentRowIndex + 1 >= currentPattern->getTotalRows()) {
+    if (this->_currentOrderIndex + 1 >= this->_mod.getSongLength()) {
       return true;
     }
+
+    this->_setOrderIndex(this->_currentOrderIndex + 1);
+    this->_setRowIndex(0);
+  } else {
+    this->_setRowIndex(this->_currentRowIndex + 1);
   }
 
   return false;
@@ -120,8 +96,8 @@ void Generator::generateByChannel(std::vector<float> &data, size_t start,
   float sampleVolume = (float)sample.getVolume() / 64.0f * channelState.volume;
 
   for (auto i = start; i < end; i++) {
-    auto sampleDataIndex =
-        (size_t)(channelState.sampleTime + (float)dataIndex2 * channelState.pitch);
+    auto sampleDataIndex = (size_t)(channelState.sampleTime +
+                                    (float)dataIndex2 * channelState.pitch);
 
     if (sampleDataIndex >= sampleData.size()) {
       if (sample.getRepeatLength() == 0) {
@@ -131,11 +107,13 @@ void Generator::generateByChannel(std::vector<float> &data, size_t start,
         channelState.sampleTime = (float)sample.getRepeatPoint();
         // Todo
         dataIndex2 = 0;
-        sampleDataIndex = (size_t)(channelState.sampleTime + (float)dataIndex2 * channelState.pitch);
+        sampleDataIndex = (size_t)(channelState.sampleTime +
+                                   (float)dataIndex2 * channelState.pitch);
       }
     }
 
-    data[i] += sampleData[sampleDataIndex] * sampleVolume / (float)this->_mod.getChannels();
+    data[i] += sampleData[sampleDataIndex] * sampleVolume /
+               (float)this->_mod.getChannels();
 
     dataIndex2++;
   }
@@ -174,10 +152,10 @@ void Generator::setMod(Mod mod) {
 }
 
 void Generator::stop() {
-  this->_currentOrderIndex = 0;
-  this->_currentRowIndex = 0;
+  this->_setState(GeneratorState::Paused);
+  this->_setOrderIndex(0);
+  this->_setRowIndex(0);
   this->_timePassed = 0;
-  this->_generatorState = GeneratorState::Paused;
   this->_rowPlayed = false;
 }
 
@@ -186,9 +164,9 @@ void Generator::restart() {
   this->start();
 }
 
-void Generator::pause() { this->_generatorState = GeneratorState::Paused; }
+void Generator::pause() { this->_setState(GeneratorState::Paused); }
 
-void Generator::start() { this->_generatorState = GeneratorState::Playing; }
+void Generator::start() { this->_setState(GeneratorState::Playing); }
 
 void Generator::generate(uint8_t *data, size_t size) {
   if (this->_convertor == nullptr) {
@@ -242,17 +220,9 @@ void Generator::generate(uint8_t *data, size_t size) {
 
     this->_rowPlayed = true;
 
-    if ((this->_timePassed % this->_timePerRow) + (next - current) >= this->_timePerRow) {
-      //    if (next >= this->_timePerRow) {
-      //        if (next >=
-      //            this->_timePerRow) {
-      auto message = fmt::format("{} : {} : {} ; {} < {}", this->_timePerRow,
-                                 this->_timePassed % this->_timePerRow,
-                                 this->_timePassed % this->_timePerRow + (next - current),
-                                 next, current);
-      std::cout << message << std::endl;
+    if ((this->_timePassed % this->_timePerRow) + (next - current) >=
+        this->_timePerRow) {
       this->_rowPlayed = false;
-      std::cout << InfoString::fancyRow(currentRow) << std::endl;
       if (this->advanceIndexes()) {
         this->stop();
         break;
@@ -271,19 +241,6 @@ void Generator::generate(uint8_t *data, size_t size) {
   }
 
   std::memset(this->_buffer.data(), 0, this->_buffer.size() * sizeof(float));
-
-  //  size_t byteCount = ((char *)&this->_buffer[this->_buffer.size() - 1] -
-  //  (char *)&this->_buffer[0]);
-
-  //  std::cout << "Passed: " << this->_timePassed
-  //            << "; Wrapped: " << (this->_timePassed % this->_timePerRow)
-  //            << "; Row: " << this->_currentRowIndex
-  //            << "; Order: " << this->_currentOrderIndex << std::endl;
-  //  std::cout << "Prev: " << this->_previousSampleIndex[channelIndex]
-  //            << "; Chan time: " << this->_perChannelTime[channelIndex]
-  //            << std::endl;
-  //  std::cout << InfoString::toString(note)
-  //            << std::endl;
 }
 
 void Generator::setEncoding(Encoding audioDataEncoding) {
@@ -329,7 +286,7 @@ void Generator::setCurrentOrder(size_t index) {
   }
 
   this->resetState();
-  this->_currentOrderIndex = index;
+  this->_setOrderIndex(index);
 }
 
 void Generator::setCurrentRow(size_t index) {
@@ -346,7 +303,7 @@ void Generator::setCurrentRow(size_t index) {
   }
 
   this->resetState();
-  this->_currentRowIndex = index;
+  this->_setRowIndex(index);
 }
 
 void Generator::solo(size_t channelIndex) {
