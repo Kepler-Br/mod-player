@@ -41,9 +41,9 @@ void setCallbacks(mod::Generator &generator) {
       [](mod::Generator &generator, size_t oldIndex, size_t newIndex) {
         const mod::Row &currentRow = generator.getCurrentRow();
 
-//        std::cout << std::setfill('0') << std::setw(2) << std::hex << newIndex
-//                  << std::dec << " ";
-//        std::cout << mod::InfoString::fancyRow(currentRow) << std::endl;
+        std::cout << std::setfill('0') << std::setw(2) << std::hex << oldIndex
+                  << std::dec << " ";
+        std::cout << mod::InfoString::fancyRow(currentRow) << std::endl;
       });
 
   generator.setNextOrderCallback(
@@ -65,16 +65,20 @@ void setCallbacks(mod::Generator &generator) {
 }
 
 int main() {
-  mod::Mod serializedMod = mod::Reader::read("ignore-mods/shofixt.mod");
+  using namespace mod;
+  // TODO: Make use of new templated struct "ChangedValue"
+  // TODO: comandr.mod + 11025.0f * 0.4f not working
+  // TODO: Speed change not affected by frequency
+  std::shared_ptr<Mod> serializedMod = Reader::read("ignore-mods/comandr.mod");
 
-  std::cout << mod::InfoString::toString(serializedMod) << "\n";
+  std::cout << mod::InfoString::toString(*serializedMod) << "\n";
 
-  mod::Generator generator(std::move(serializedMod), mod::Encoding::Signed8);
+  mod::Generator generator(serializedMod, mod::Encoding::Signed8);
   generator.setFrequency(11025.0f * 2.0f);
 //  generator.setFrequency(8363.0f);
 //  generator.setFrequency(8550.0f);
 //  generator.setFrequency(8353.0f);
-  generator.setVolume(0.7f);
+  generator.setVolume(0.5f);
 
   setCallbacks(generator);
 

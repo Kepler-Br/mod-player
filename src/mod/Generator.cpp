@@ -1,10 +1,14 @@
-#include "Generator.h"
-
 #include <fmt/format.h>
 
 #include <iostream>
+#include <utility>
+
+#include "Generator.h"
+#include "exceptions/BadStateException.h"
 
 namespace mod {
+
+#pragma region private static
 
 void Generator::convertToU8(const float &value, uint8_t *target) {
   constexpr int maxSigned = 0x80 - 1;
@@ -33,15 +37,19 @@ void Generator::convertToS16(const float &value, uint8_t *target) {
   *(int16_t *)target = (int16_t)((int)(value * maxSigned16Float));
 }
 
+#pragma endregion
+
+#pragma region private
+
 bool Generator::advanceIndexes() {
   if (this->_generatorState == GeneratorState::Paused) {
     return false;
   }
 
-  const std::vector<Pattern> &patterns = this->_mod.getPatterns();
-  const std::vector<int> &orders = this->_mod.getOrders();
+  const std::vector<Pattern> &patterns = this->_mod->getPatterns();
+  const std::vector<int> &orders = this->_mod->getOrders();
 
-  if (this->_currentOrderIndex >= this->_mod.getSongLength()) {
+  if (this->_currentOrderIndex >= this->_mod->getSongLength()) {
     return true;
   }
 
@@ -49,12 +57,12 @@ bool Generator::advanceIndexes() {
   const Pattern *currentPattern = &patterns[currentOrder];
 
   if (this->_currentRowIndex + 1 >= currentPattern->getTotalRows()) {
-    if (this->_currentOrderIndex + 1 >= this->_mod.getSongLength()) {
+    if (this->_currentOrderIndex + 1 >= this->_mod->getSongLength()) {
       return true;
     }
 
-    this->_setOrderIndex(this->_currentOrderIndex + 1);
     this->_setRowIndex(0);
+    this->_setOrderIndex(this->_currentOrderIndex + 1);
   } else {
     this->_setRowIndex(this->_currentRowIndex + 1);
   }
@@ -86,7 +94,7 @@ void Generator::generateByChannel(std::vector<float> &data, size_t start,
     return;
   }
 
-  const Sample &sample = this->_mod.getSamples()[sampleIndex - 1];
+  const Sample &sample = this->_mod->getSamples()[sampleIndex - 1];
   const std::vector<float> &sampleData = sample.getData();
 
   size_t dataIndex2 = 0;
@@ -115,7 +123,7 @@ void Generator::generateByChannel(std::vector<float> &data, size_t start,
     }
 
     data[i] += sampleData[sampleDataIndex] * sampleVolume /
-               (float)this->_mod.getChannels();
+               (float)this->_mod->getChannels();
 
     dataIndex2++;
   }
@@ -127,18 +135,77 @@ void Generator::generateByChannel(std::vector<float> &data, size_t start,
   channelState.sampleTime += (float)dataIndex2 * channelState.pitch;
 }
 
-Generator::Generator(Mod mod, Encoding audioDataEncoding)
+void Generator::resetState() {
+  for (auto &state : this->_channelsStates) {
+    state = {};
+  }
+}
+
+void Generator::_setState(GeneratorState newState) {
+  if (this->_stateChangedCallback != nullptr) {
+    this->_stateChangedCallback(*this, this->_generatorState, newState);
+  }
+
+  this->_generatorState = newState;
+}
+
+void Generator::_setRowIndex(size_t newRowIndex) {
+  if (this->_nextRowCallback != nullptr) {
+    this->_nextRowCallback(*this, this->_currentRowIndex, newRowIndex);
+  }
+
+  this->_currentRowIndex = newRowIndex;
+}
+
+void Generator::_setOrderIndex(size_t newOrderIndex) {
+  if (this->_nextOrderCallback != nullptr) {
+    const std::vector<int> orders = this->_mod->getOrders();
+
+    const int &oldPatternIndex = orders[this->_currentOrderIndex];
+    const int &newPatternIndex = orders[newOrderIndex];
+    this->_nextOrderCallback(*this, this->_currentOrderIndex, newOrderIndex,
+                             oldPatternIndex, newPatternIndex);
+  }
+
+  this->_currentOrderIndex = newOrderIndex;
+}
+
+#pragma endregion
+
+#pragma region public constructor
+
+Generator::Generator(std::shared_ptr<Mod> mod, Encoding audioDataEncoding)
     : _mod(std::move(mod)), _audioDataEncoding(audioDataEncoding) {
-  this->_channelsStates.resize(this->_mod.getChannels());
-  this->_mutedChannels.resize(this->_mod.getChannels(), false);
+  this->_channelsStates.resize(this->_mod->getChannels());
+  this->_mutedChannels.resize(this->_mod->getChannels(), false);
 
   this->setEncoding(audioDataEncoding);
+}
+
+#pragma endregion
+
+#pragma region public
+
+void Generator::setNextRowCallback(
+    std::function<void(Generator &, size_t, size_t)> callback) {
+  this->_nextRowCallback = std::move(callback);
+}
+
+void Generator::setNextOrderCallback(
+    std::function<void(mod::Generator &, size_t, size_t, size_t, size_t)>
+        callback) {
+  this->_nextOrderCallback = std::move(callback);
+}
+
+void Generator::setStateChangedCallback(
+    std::function<void(Generator &, GeneratorState, GeneratorState)> callback) {
+  this->_stateChangedCallback = std::move(callback);
 }
 
 void Generator::setVolume(float volume) { this->_volume = volume; }
 
 void Generator::setFrequency(float frequency) {
-  if (frequency <= 0.0f) {
+  if (frequency <= 1.0f) {
     throw std::invalid_argument(
         fmt::format("Frequency cannot be less than 0. Have {}", frequency));
   }
@@ -149,11 +216,75 @@ void Generator::setFrequency(float frequency) {
   this->_frequency = frequency;
 }
 
-void Generator::setMod(Mod mod) {
+void Generator::setMod(std::shared_ptr<Mod> mod) {
   this->_mod = std::move(mod);
-  this->_channelsStates.resize(this->_mod.getChannels());
+  this->_channelsStates.resize(this->_mod->getChannels());
 
   this->resetState();
+}
+
+std::shared_ptr<Mod> Generator::getMod() { return this->_mod; }
+
+const std::shared_ptr<Mod> Generator::getMod() const { return this->_mod; }
+
+Row &Generator::getRow(size_t index) {
+  if (this->_mod == nullptr) {
+    throw BadStateException("Mod was not set.");
+  }
+
+  Pattern &pattern = this->getCurrentPattern();
+
+  return pattern.getRow(index);
+}
+
+const Row &Generator::getRow(size_t index) const {
+  if (this->_mod == nullptr) {
+    throw BadStateException("Mod was not set.");
+  }
+
+  const Pattern &pattern = this->getCurrentPattern();
+
+  return pattern.getRow(index);
+}
+
+Row &Generator::getCurrentRow() {
+  if (this->_mod == nullptr) {
+    throw BadStateException("Mod was not set.");
+  }
+
+  Pattern &pattern = this->getCurrentPattern();
+
+  return pattern.getRow(this->_currentRowIndex);
+}
+
+const Row &Generator::getCurrentRow() const {
+  if (this->_mod == nullptr) {
+    throw BadStateException("Mod was not set.");
+  }
+
+  const Pattern &pattern = this->getCurrentPattern();
+
+  return pattern.getRow(this->_currentRowIndex);
+}
+
+Pattern &Generator::getCurrentPattern() {
+  if (this->_mod == nullptr) {
+    throw BadStateException("Mod was not set.");
+  }
+
+  const int &patternIndex = this->_mod->getOrders()[this->_currentOrderIndex];
+
+  return this->_mod->getPatterns()[patternIndex];
+}
+
+const Pattern &Generator::getCurrentPattern() const {
+  if (this->_mod == nullptr) {
+    throw BadStateException("Mod was not set.");
+  }
+
+  const int &patternIndex = this->_mod->getOrders()[this->_currentOrderIndex];
+
+  return this->_mod->getPatterns()[patternIndex];
 }
 
 void Generator::stop() {
@@ -175,7 +306,11 @@ void Generator::start() { this->_setState(GeneratorState::Playing); }
 
 void Generator::generate(uint8_t *data, size_t size) {
   if (this->_convertor == nullptr) {
-    throw std::logic_error("generate: Audio encoding was not set.");
+    throw BadStateException("generate: Audio encoding was not set.");
+  }
+
+  if (this->_mod == nullptr) {
+    throw BadStateException("generate: Mod was not set.");
   }
 
   if (this->_generatorState == GeneratorState::Paused) {
@@ -210,8 +345,8 @@ void Generator::generate(uint8_t *data, size_t size) {
                       this->_buffer.size());
     }
 
-    const std::vector<Pattern> &patterns = this->_mod.getPatterns();
-    const std::vector<int> &orders = this->_mod.getOrders();
+    const std::vector<Pattern> &patterns = this->_mod->getPatterns();
+    const std::vector<int> &orders = this->_mod->getOrders();
 
     int currentOrder = orders[this->_currentOrderIndex];
     const Pattern &currentPattern = patterns[currentOrder];
@@ -226,7 +361,7 @@ void Generator::generate(uint8_t *data, size_t size) {
       }
     }
 
-    for (auto channelIndex = 0; channelIndex < this->_mod.getChannels();
+    for (auto channelIndex = 0; channelIndex < this->_mod->getChannels();
          channelIndex++) {
       if (this->_mutedChannels[channelIndex]) {
         continue;
@@ -242,7 +377,7 @@ void Generator::generate(uint8_t *data, size_t size) {
         this->_timePerRow) {
       this->_rowPlayed = false;
       if (this->advanceIndexes()) {
-        this->stop();
+        this->pause();
         break;
       }
     }
@@ -296,11 +431,15 @@ Encoding Generator::getAudioDataEncoding() const {
 GeneratorState Generator::getState() const { return this->_generatorState; }
 
 void Generator::setCurrentOrder(size_t index) {
-  if (index >= this->_mod.getOrders().size()) {
+  if (this->_mod == nullptr) {
+    throw BadStateException("Mod was not set.");
+  }
+
+  if (index >= this->_mod->getOrders().size()) {
     const std::string message = fmt::format(
         "setCurrentOrder: Tried to set order out of range: {}. Total orders: "
         "{}",
-        index, this->_mod.getOrders().size());
+        index, this->_mod->getOrders().size());
 
     throw std::out_of_range(message);
   }
@@ -310,8 +449,12 @@ void Generator::setCurrentOrder(size_t index) {
 }
 
 void Generator::setCurrentRow(size_t index) {
-  const auto &patternIndex = this->_mod.getOrders()[this->_currentOrderIndex];
-  const auto &pattern = this->_mod.getPatterns()[patternIndex];
+  if (this->_mod == nullptr) {
+    throw BadStateException("Mod was not set.");
+  }
+
+  const auto &patternIndex = this->_mod->getOrders()[this->_currentOrderIndex];
+  const auto &pattern = this->_mod->getPatterns()[patternIndex];
 
   if (index >= pattern.getTotalRows()) {
     const std::string message = fmt::format(
@@ -327,6 +470,10 @@ void Generator::setCurrentRow(size_t index) {
 }
 
 void Generator::solo(size_t channelIndex) {
+  if (this->_mod == nullptr) {
+    throw BadStateException("Mod was not set.");
+  }
+
   if (channelIndex >= this->_mutedChannels.size()) {
     const std::string message = fmt::format(
         "solo: Tried to set channel solo out of range: {}. Total channels: "
@@ -344,6 +491,10 @@ void Generator::solo(size_t channelIndex) {
 }
 
 void Generator::unmute(size_t channelIndex) {
+  if (this->_mod == nullptr) {
+    throw BadStateException("Mod was not set.");
+  }
+
   if (channelIndex >= this->_mutedChannels.size()) {
     const std::string message = fmt::format(
         "unmute: Tried to set channel unmute out of range: {}. Total channels: "
@@ -357,6 +508,10 @@ void Generator::unmute(size_t channelIndex) {
 }
 
 void Generator::mute(size_t channelIndex) {
+  if (this->_mod == nullptr) {
+    throw BadStateException("Mod was not set.");
+  }
+
   if (channelIndex >= this->_mutedChannels.size()) {
     const std::string message = fmt::format(
         "mute: Tried to set channel mute out of range: {}. Total channels: "
@@ -370,18 +525,30 @@ void Generator::mute(size_t channelIndex) {
 }
 
 void Generator::unmuteAll() {
+  if (this->_mod == nullptr) {
+    throw BadStateException("Mod was not set.");
+  }
+
   for (auto &&b : this->_mutedChannels) {
     b = false;
   }
 }
 
 void Generator::muteAll() {
+  if (this->_mod == nullptr) {
+    throw BadStateException("Mod was not set.");
+  }
+
   for (auto &&b : this->_mutedChannels) {
     b = true;
   }
 }
 
 bool Generator::isMuted(size_t channelIndex) {
+  if (this->_mod == nullptr) {
+    throw BadStateException("Mod was not set.");
+  }
+
   if (channelIndex >= this->_mutedChannels.size()) {
     const std::string message = fmt::format(
         "mute: Tried to set channel mute out of range: {}. Total channels: "
@@ -393,5 +560,7 @@ bool Generator::isMuted(size_t channelIndex) {
 
   return this->_mutedChannels[channelIndex];
 }
+
+#pragma endregion
 
 }  // namespace mod

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <utility>
 
 #include "Mod.h"
@@ -12,6 +13,12 @@ enum class GeneratorState {
   Paused,
 };
 
+template <class T>
+struct ChangedValue {
+  T &oldValue;
+  T &newValue;
+};
+
 class Generator {
  private:
   struct ChannelState {
@@ -21,7 +28,7 @@ class Generator {
     float pitch = 1.0f;
   };
 
-  Mod _mod;
+  std::shared_ptr<Mod> _mod = nullptr;
   std::vector<ChannelState> _channelsStates;
   std::vector<bool> _mutedChannels;
   std::vector<float> _buffer;
@@ -35,9 +42,11 @@ class Generator {
   float _volume = 1.0f;
   float _frequency = 22050.0f;
 
-  std::function<void (Generator &, size_t, size_t)> _nextRowCallback = nullptr;
-  std::function<void (Generator &, size_t, size_t, size_t, size_t)> _nextOrderCallback = nullptr;
-  std::function<void (Generator &, GeneratorState, GeneratorState)> _stateChangedCallback = nullptr;
+  std::function<void(Generator &, size_t, size_t)> _nextRowCallback = nullptr;
+  std::function<void(Generator &, size_t, size_t, size_t, size_t)>
+      _nextOrderCallback = nullptr;
+  std::function<void(Generator &, GeneratorState, GeneratorState)>
+      _stateChangedCallback = nullptr;
 
   GeneratorState _generatorState = GeneratorState::Playing;
   Encoding _audioDataEncoding = Encoding::Unknown;
@@ -58,134 +67,101 @@ class Generator {
   void generateByChannel(std::vector<float> &data, size_t start, size_t end,
                          const Row &row, size_t channelIndex);
 
-  void resetState() {
-    for (auto &state : this->_channelsStates) {
-      state = {};
-    }
-  }
+  void resetState();
 
-  void _setState(GeneratorState newState) {
-    if (this->_stateChangedCallback != nullptr) {
-      this->_stateChangedCallback(*this, this->_generatorState, newState);
-    }
+  void _setState(GeneratorState newState);
 
-    this->_generatorState = newState;
-  }
+  void _setRowIndex(size_t newRowIndex);
 
-  void _setRowIndex(size_t newRowIndex) {
-    if (this->_nextRowCallback != nullptr) {
-      this->_nextRowCallback(*this, this->_currentRowIndex, newRowIndex);
-    }
-
-    this->_currentRowIndex = newRowIndex;
-  }
-
-  void _setOrderIndex(size_t newOrderIndex) {
-    if (this->_nextOrderCallback != nullptr) {
-      const std::vector<int> orders = this->_mod.getOrders();
-
-      const int &oldPatternIndex = orders[this->_currentOrderIndex];
-      const int &newPatternIndex = orders[newOrderIndex];
-      this->_nextOrderCallback(*this, this->_currentOrderIndex, newOrderIndex, oldPatternIndex, newPatternIndex);
-    }
-
-    this->_currentOrderIndex = newOrderIndex;
-  }
+  void _setOrderIndex(size_t newOrderIndex);
 
  public:
   /**
    * @param mod
    * @param audioDataEncoding
-   * @throw std::invalid_argument
+   * @throws invalid_argument
    */
-  explicit Generator(Mod mod, Encoding audioDataEncoding);
+  Generator(std::shared_ptr<Mod> mod, Encoding audioDataEncoding);
 
   Generator() = default;
 
   /**
    * @param callback If nullptr, then callback would not be called.
    */
-  void setNextRowCallback(std::function<void (Generator &, size_t oldIndex, size_t newIndex)> callback) {
-    this->_nextRowCallback = std::move(callback);
-  }
+  void setNextRowCallback(
+      std::function<void(Generator &, size_t oldIndex, size_t newIndex)>
+          callback);
 
   /**
    * @param callback If nullptr, then callback would not be called.
    */
-  void setNextOrderCallback(std::function<void (mod::Generator &generator, size_t oldOrderIndex, size_t newOrderIndex, size_t oldPatternIndex, size_t newPatternIndex)> callback) {
-    this->_nextOrderCallback = std::move(callback);
-  }
+  void setNextOrderCallback(
+      std::function<void(mod::Generator &generator, size_t oldOrderIndex,
+                         size_t newOrderIndex, size_t oldPatternIndex,
+                         size_t newPatternIndex)>
+          callback);
 
   /**
    * @param callback If nullptr, then callback would not be called.
    */
-  void setStateChangedCallback(std::function<void (Generator &, GeneratorState oldState, GeneratorState newState)> callback) {
-    this->_stateChangedCallback = std::move(callback);
-  }
+  void setStateChangedCallback(
+      std::function<void(Generator &, GeneratorState oldState,
+                         GeneratorState newState)>
+          callback);
 
   void setVolume(float volume);
 
   /**
-   * @throws std::invalid_argument
    * @param frequency
+   * @throws invalid_argument If frequency is <= 1.0f.
    */
   void setFrequency(float frequency);
 
-  void setMod(Mod mod);
+  void setMod(std::shared_ptr<Mod> mod);
 
-  Mod &getMod() {
-    return this->_mod;
-  }
+  std::shared_ptr<Mod> getMod();
 
-  [[nodiscard]] const Mod &getMod() const {
-    return this->_mod;
-  }
+  [[nodiscard]] const std::shared_ptr<Mod> getMod() const;
 
   /**
-   * @throws std::out_of_range
+   * @throws out_of_range If index is out of range for current pattern.
+   * @throws BadStateException If mod file was not set.
    * @param index
    * @return
    */
-  Row &getRow(size_t index) {
-    Pattern &pattern = this->getCurrentPattern();
-
-    return pattern.getRow(index);
-  }
+  Row &getRow(size_t index);
 
   /**
-   * @throws std::out_of_range
+   * @throws out_of_range If index is out of range for current pattern.
+   * @throws BadStateException If mod file was not set.
    * @param index
    * @return
    */
-  [[nodiscard]] const Row &getRow(size_t index) const {
-    const Pattern &pattern = this->getCurrentPattern();
+  [[nodiscard]] const Row &getRow(size_t index) const;
 
-    return pattern.getRow(index);
-  }
+  /**
+   * @throws BadStateException If mod file was not set.
+   * @return
+   */
+  Row &getCurrentRow();
 
-  Row &getCurrentRow() {
-    Pattern &pattern = this->getCurrentPattern();
+  /**
+   * @throws BadStateException If mod file was not set.
+   * @return
+   */
+  [[nodiscard]] const Row &getCurrentRow() const;
 
-    return pattern.getRow(this->_currentRowIndex);
-  }
+  /**
+   * @throws BadStateException If mod file was not set.
+   * @return
+   */
+  Pattern &getCurrentPattern();
 
-  [[nodiscard]] const Row &getCurrentRow() const {
-    const Pattern &pattern = this->getCurrentPattern();
-
-    return pattern.getRow(this->_currentRowIndex);
-  }
-
-  Pattern &getCurrentPattern() {
-    const int &patternIndex = this->_mod.getOrders()[this->_currentOrderIndex];
-
-    return this->_mod.getPatterns()[patternIndex];
-  }
-
-  [[nodiscard]] const Pattern &getCurrentPattern() const {
-    const int &patternIndex = this->_mod.getOrders()[this->_currentOrderIndex];
-
-    return this->_mod.getPatterns()[patternIndex];
-  }
+  /**
+   * @throws BadStateException If mod file was not set.
+   * @return
+   */
+  [[nodiscard]] const Pattern &getCurrentPattern() const;
 
   void stop();
   void restart();
@@ -195,13 +171,13 @@ class Generator {
   /**
    * @param data
    * @param size
-   * @throw std::logic_error
+   * @throws BadStateException If encoding or mod was not set.
    */
   void generate(uint8_t *data, size_t size);
 
   /**
    * @param audioDataEncoding
-   * @throw std::invalid_argument
+   * @throws invalid_argument If passed unsupported encoding.
    */
   void setEncoding(Encoding audioDataEncoding);
 
@@ -211,41 +187,53 @@ class Generator {
 
   /**
    * @param index
-   * @throw std::out_of_range
+   * @throws out_of_range
+   * @throws BadStateException If encoding or mod was not set.
    */
   void setCurrentOrder(size_t index);
 
   /**
    * @param index
-   * @throw std::out_of_range
+   * @throws out_of_range
+   * @throws BadStateException If encoding or mod was not set.
    */
   void setCurrentRow(size_t index);
 
   /**
    * @param channelIndex
-   * @throw std::out_of_range
+   * @throws out_of_range
+   * @throws BadStateException If encoding or mod was not set.
    */
   void solo(size_t channelIndex);
 
   /**
    * @param channelIndex
-   * @throw std::out_of_range
+   * @throws out_of_range
+   * @throws BadStateException If encoding or mod was not set.
    */
   void unmute(size_t channelIndex);
 
   /**
    * @param channelIndex
-   * @throw std::out_of_range
+   * @throws out_of_range
+   * @throws BadStateException If encoding or mod was not set.
    */
   void mute(size_t channelIndex);
 
+  /**
+   * @throws BadStateException If encoding or mod was not set.
+   */
   void unmuteAll();
 
+  /**
+   * @throws BadStateException If encoding or mod was not set.
+   */
   void muteAll();
 
   /**
    * @param channelIndex
-   * @throw std::out_of_range
+   * @throws out_of_range
+   * @throws BadStateException If encoding or mod was not set.
    */
   bool isMuted(size_t channelIndex);
 };

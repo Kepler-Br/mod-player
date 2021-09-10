@@ -202,7 +202,7 @@ std::string Reader::readName(std::ifstream &stream) {
   return name;
 }
 
-Mod Reader::read(const std::string &path) {
+std::shared_ptr<Mod> Reader::read(const std::string &path) {
   std::ifstream stream(path);
 
   if (!stream) {
@@ -237,8 +237,8 @@ Mod Reader::read(const std::string &path) {
 
   Reader::readSamplesAudioData(stream, samples, Encoding::Signed8);
 
-  return Mod(name, songLength, std::move(samples), std::move(patterns),
-             std::move(orders));
+  return std::make_shared<Mod>(name, songLength, std::move(samples),
+                               std::move(patterns), std::move(orders));
 }
 
 }  // namespace mod

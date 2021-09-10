@@ -1,12 +1,13 @@
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "Encoding.h"
 #include "Mod.h"
 #include "Pattern.h"
 #include "Sample.h"
-#include "Encoding.h"
 
 namespace mod {
 
@@ -55,7 +56,7 @@ class Reader {
  public:
   Reader() = delete;
 
-  static Mod read(const std::string &path);
+  static std::shared_ptr<Mod> read(const std::string &path);
 };
 
 }  // namespace mod
