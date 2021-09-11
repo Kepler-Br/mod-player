@@ -9,10 +9,11 @@
 #include "fmt/format.h"
 #include "mod/Generator.h"
 #include "mod/InfoString.h"
-#include "mod/Reader.h"
 #include "mod/Row.h"
 #include "mod/writer/RawWriter.h"
 #include "mod/writer/WavWriter.h"
+#include "mod/loaders/TrackerLoader.h"
+#include "mod/loaders/ModLoader.h"
 
 extern void fill_audio(void *udata, Uint8 *stream, int len);
 
@@ -20,7 +21,7 @@ bool initAudio(void *userdata) {
   SDL_AudioSpec wanted;
 
   /* Set the audio format */
-  wanted.freq = 11025 * 2.0f;
+  wanted.freq = (int)(11025 * 2.0f);
 //  wanted.freq = 8353;
   wanted.format = AUDIO_S8;
   wanted.channels = 1;   /* 1 = mono, 2 = stereo */
@@ -69,7 +70,11 @@ int main() {
   // TODO: Make use of new templated struct "ChangedValue"
   // TODO: comandr.mod + 11025.0f * 0.4f not working
   // TODO: Speed change not affected by frequency
-  std::shared_ptr<Mod> serializedMod = Reader::read("ignore-mods/comandr.mod");
+  // TODO: Add to generator setter for order and row simultaneously
+
+  std::shared_ptr<TrackerLoader> trackerLoader = std::make_shared<ModLoader>();
+
+  std::shared_ptr<Mod> serializedMod = trackerLoader->load("ignore-mods/thradd.mod");
 
   std::cout << mod::InfoString::toString(*serializedMod) << "\n";
 
@@ -78,7 +83,7 @@ int main() {
 //  generator.setFrequency(8363.0f);
 //  generator.setFrequency(8550.0f);
 //  generator.setFrequency(8353.0f);
-  generator.setVolume(0.5f);
+  generator.setVolume(4.0f);
 
   setCallbacks(generator);
 
@@ -114,6 +119,12 @@ void fill_audio(void *udata, Uint8 *stream, int len) {
   auto &generator = *(mod::Generator *)udata;
 
   generator.generate(stream, len);
+
+//  for (int i = 0; i < len; i++) {
+//    std::cout << (int)stream[i] << "|";
+//  }
+//
+//  std::cout << "\n";
 //  for (int i = 0; i < len; i++) {
 //    if (stream[i] != (uint8_t)63) {
 //      std::cout << "Index: " << i << "; Len: " << len << "; Value: " << (int)(stream[i]) << "\n";

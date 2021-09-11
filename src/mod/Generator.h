@@ -53,11 +53,6 @@ class Generator {
 
   void (*_convertor)(const float &value, uint8_t *target) = nullptr;
 
-  static void convertToU8(const float &value, uint8_t *target);
-  static void convertToS8(const float &value, uint8_t *target);
-  static void convertToU16(const float &value, uint8_t *target);
-  static void convertToS16(const float &value, uint8_t *target);
-
   /**
    * Advance current order and current row indexes.
    * @return true if end reached, false if not.
@@ -121,7 +116,7 @@ class Generator {
 
   std::shared_ptr<Mod> getMod();
 
-  [[nodiscard]] const std::shared_ptr<Mod> getMod() const;
+  [[nodiscard]] std::shared_ptr<const Mod> getMod() const;
 
   /**
    * @throws out_of_range If index is out of range for current pattern.

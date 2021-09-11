@@ -5,39 +5,9 @@
 
 #include "Generator.h"
 #include "exceptions/BadStateException.h"
+#include "loaders/DataConvertors.h"
 
 namespace mod {
-
-#pragma region private static
-
-void Generator::convertToU8(const float &value, uint8_t *target) {
-  constexpr int maxSigned = 0x80 - 1;
-  constexpr float maxSignedFloat = 0x80 - 1;
-
-  *target = (uint8_t)((int)(value * maxSignedFloat) + maxSigned);
-}
-
-void Generator::convertToS8(const float &value, uint8_t *target) {
-  constexpr float maxSignedFloat = 0x80 - 1;
-
-  *(int8_t *)target = (int8_t)((int)(value * maxSignedFloat));
-}
-
-void Generator::convertToU16(const float &value, uint8_t *target) {
-  constexpr int maxSigned16 = 0x8000 - 1;
-  constexpr float maxSigned16Float = 0x8000 - 1;
-
-  *(uint16_t *)target =
-      (uint16_t)((int)(value * maxSigned16Float) + maxSigned16);
-}
-
-void Generator::convertToS16(const float &value, uint8_t *target) {
-  constexpr float maxSigned16Float = 0x8000 - 1;
-
-  *(int16_t *)target = (int16_t)((int)(value * maxSigned16Float));
-}
-
-#pragma endregion
 
 #pragma region private
 
@@ -225,7 +195,7 @@ void Generator::setMod(std::shared_ptr<Mod> mod) {
 
 std::shared_ptr<Mod> Generator::getMod() { return this->_mod; }
 
-const std::shared_ptr<Mod> Generator::getMod() const { return this->_mod; }
+std::shared_ptr<const Mod> Generator::getMod() const { return this->_mod; }
 
 Row &Generator::getRow(size_t index) {
   if (this->_mod == nullptr) {
@@ -401,19 +371,19 @@ void Generator::generate(uint8_t *data, size_t size) {
 void Generator::setEncoding(Encoding audioDataEncoding) {
   switch (audioDataEncoding) {
     case Encoding::Signed16:
-      this->_convertor = &Generator::convertToS16;
+      this->_convertor = &dataconvertors::convertToS16;
       this->_bytesInEncoding = bytesInEncoding(audioDataEncoding);
       break;
     case Encoding::Unsigned16:
-      this->_convertor = &Generator::convertToU16;
+      this->_convertor = &dataconvertors::convertToU16;
       this->_bytesInEncoding = bytesInEncoding(audioDataEncoding);
       break;
     case Encoding::Signed8:
-      this->_convertor = &Generator::convertToS8;
+      this->_convertor = &dataconvertors::convertToS8;
       this->_bytesInEncoding = bytesInEncoding(audioDataEncoding);
       break;
     case Encoding::Unsigned8:
-      this->_convertor = &Generator::convertToU8;
+      this->_convertor = &dataconvertors::convertToU8;
       this->_bytesInEncoding = bytesInEncoding(audioDataEncoding);
       break;
     default:

@@ -5,7 +5,7 @@ namespace mod {
 void RawWriter::write(Generator& generator, std::ostream& stream) {
   generator.restart();
 
-  std::vector<uint8_t> buffer(256);
+  std::vector<uint8_t> buffer(2048);
 
   while(generator.getState() != GeneratorState::Paused) {
     generator.generate(buffer.data(), buffer.size());
