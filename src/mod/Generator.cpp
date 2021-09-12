@@ -31,8 +31,7 @@ bool Generator::advanceIndexes() {
       return true;
     }
 
-    this->_setRowIndex(0);
-    this->_setOrderIndex(this->_currentOrderIndex + 1);
+    this->_setOrderAndRowIndex(this->_currentOrderIndex + 1, 0);
   } else {
     this->_setRowIndex(this->_currentRowIndex + 1);
   }
@@ -111,9 +110,19 @@ void Generator::resetState() {
   }
 }
 
+size_t Generator::calculateTimePerRow(float frequency, float speed) {
+  return (size_t)(441.5f * speed / (11025.0f * 2.0f) * frequency);
+}
+
 void Generator::_setState(GeneratorState newState) {
+  if (newState == this->_generatorState) {
+    return;
+  }
+
   if (this->_stateChangedCallback != nullptr) {
-    this->_stateChangedCallback(*this, this->_generatorState, newState);
+    ChangedValue<GeneratorState> state(this->_generatorState, newState);
+
+    this->_stateChangedCallback(*this, ChangedStateEvent(state));
   }
 
   this->_generatorState = newState;
@@ -121,23 +130,69 @@ void Generator::_setState(GeneratorState newState) {
 
 void Generator::_setRowIndex(size_t newRowIndex) {
   if (this->_nextRowCallback != nullptr) {
-    this->_nextRowCallback(*this, this->_currentRowIndex, newRowIndex);
-  }
+    const std::vector<int> &orders = this->_mod->getOrders();
+    const int &patternIndex = orders[this->_currentOrderIndex];
+    ChangedValue<size_t> changedRow(this->_currentRowIndex, newRowIndex);
+    ChangedValue<size_t> changedOrder(this->_currentOrderIndex);
+    ChangedValue<size_t> changedPattern(patternIndex);
+    ChangedRowEvent event(changedRow, changedOrder, changedPattern);
 
-  this->_currentRowIndex = newRowIndex;
+    this->_currentRowIndex = newRowIndex;
+
+    this->_nextRowCallback(*this, event);
+  } else {
+    this->_currentRowIndex = newRowIndex;
+  }
 }
 
 void Generator::_setOrderIndex(size_t newOrderIndex) {
   if (this->_nextOrderCallback != nullptr) {
-    const std::vector<int> orders = this->_mod->getOrders();
+    const std::vector<int> &orders = this->_mod->getOrders();
 
     const int &oldPatternIndex = orders[this->_currentOrderIndex];
     const int &newPatternIndex = orders[newOrderIndex];
-    this->_nextOrderCallback(*this, this->_currentOrderIndex, newOrderIndex,
-                             oldPatternIndex, newPatternIndex);
-  }
+    ChangedValue<size_t> changedRow(this->_currentRowIndex);
+    ChangedValue<size_t> changedOrder(this->_currentOrderIndex, newOrderIndex);
+    ChangedValue<size_t> changedPattern(oldPatternIndex, newPatternIndex);
+    ChangedOrderEvent event(changedRow, changedOrder, changedPattern);
 
-  this->_currentOrderIndex = newOrderIndex;
+    this->_currentOrderIndex = newOrderIndex;
+
+    this->_nextOrderCallback(*this, event);
+  } else {
+    this->_currentOrderIndex = newOrderIndex;
+  }
+}
+
+void Generator::_setOrderAndRowIndex(size_t newOrderIndex, size_t newRowIndex) {
+  if (this->_nextOrderCallback != nullptr || this->_nextRowCallback != nullptr) {
+    const std::vector<int> &orders = this->_mod->getOrders();
+
+    const int &oldPatternIndex = orders[this->_currentOrderIndex];
+    const int &newPatternIndex = orders[newOrderIndex];
+
+    ChangedValue<size_t> changedRow(this->_currentRowIndex, newRowIndex);
+    ChangedValue<size_t> changedOrder(this->_currentOrderIndex, newOrderIndex);
+    ChangedValue<size_t> changedPattern(oldPatternIndex, newPatternIndex);
+
+    this->_currentOrderIndex = newOrderIndex;
+    this->_currentRowIndex = newRowIndex;
+
+    if (this->_nextOrderCallback != nullptr) {
+      ChangedOrderEvent event(changedRow, changedOrder, changedPattern);
+
+      this->_nextOrderCallback(*this, event);
+    }
+
+    if (this->_nextRowCallback != nullptr) {
+      ChangedRowEvent event(changedRow, changedOrder, changedPattern);
+
+      this->_nextRowCallback(*this, event);
+    }
+  } else {
+    this->_currentOrderIndex = newOrderIndex;
+    this->_currentRowIndex = newRowIndex;
+  }
 }
 
 #pragma endregion
@@ -157,18 +212,20 @@ Generator::Generator(std::shared_ptr<Mod> mod, Encoding audioDataEncoding)
 #pragma region public
 
 void Generator::setNextRowCallback(
-    std::function<void(Generator &, size_t, size_t)> callback) {
+    std::function<void(Generator &, ChangedRowEvent event)>
+        callback) {
   this->_nextRowCallback = std::move(callback);
 }
 
 void Generator::setNextOrderCallback(
-    std::function<void(mod::Generator &, size_t, size_t, size_t, size_t)>
+    std::function<void(mod::Generator &generator, ChangedOrderEvent event)>
         callback) {
   this->_nextOrderCallback = std::move(callback);
 }
 
 void Generator::setStateChangedCallback(
-    std::function<void(Generator &, GeneratorState, GeneratorState)> callback) {
+    std::function<void(Generator &, ChangedStateEvent event)>
+        callback) {
   this->_stateChangedCallback = std::move(callback);
 }
 
@@ -180,7 +237,8 @@ void Generator::setFrequency(float frequency) {
         fmt::format("Frequency cannot be less than 0. Have {}", frequency));
   }
 
-  this->_timePerRow = (size_t)(440.0f * 6.0f / (11025 * 2.0f) * frequency);
+  this->_timePerRow = this->calculateTimePerRow(frequency, 6.0f);
+//  this->_timePerRow = (size_t)(450.0f * 6.0f / (11025 * 2.0f) * frequency);
   //  this->_timePerRow = frequency;
 
   this->_frequency = frequency;
@@ -259,15 +317,16 @@ const Pattern &Generator::getCurrentPattern() const {
 
 void Generator::stop() {
   this->_setState(GeneratorState::Paused);
-  this->_setOrderIndex(0);
-  this->_setRowIndex(0);
+  this->_setOrderAndRowIndex(0, 0);
   this->_timePassed = 0;
   this->_rowPlayed = false;
 }
 
 void Generator::restart() {
-  this->stop();
-  this->start();
+  this->_setState(GeneratorState::Playing);
+  this->_setOrderAndRowIndex(0, 0);
+  this->_timePassed = 0;
+  this->_rowPlayed = false;
 }
 
 void Generator::pause() { this->_setState(GeneratorState::Paused); }
@@ -296,17 +355,6 @@ void Generator::generate(uint8_t *data, size_t size) {
   }
 
   for (size_t current = 0; current < this->_buffer.size();) {
-    //        size_t next = std::min(current + this->_timePerRow,
-    //        this->_buffer.size());
-
-    //    if (this->_timePerRow == this->_buffer.size() - 1) {
-    //      next = this->_buffer.size();
-    //      std::cout << "shit:(\n";
-    //    }
-    //    std::cout << "Current: " << current << "; Next: " << next
-    //              << "; Buffer: " << this->_buffer.size()
-    //              << "; Time per row: " << this->_timePerRow
-    //              << "; Time passed: " << this->_timePassed << "\n";
     size_t next;
     if (this->_timePassed % this->_timePerRow == 0) {
       next = std::min(current + this->_timePerRow, this->_buffer.size());
@@ -326,7 +374,7 @@ void Generator::generate(uint8_t *data, size_t size) {
     if (!this->_rowPlayed) {
       for (const auto &note : currentRow.getNotes()) {
         if (note.effectNumber == 0xF) {
-          this->_timePerRow = 440 * note.effectParameter;
+          this->_timePerRow = this->calculateTimePerRow(this->_frequency, note.effectParameter);
         }
       }
     }

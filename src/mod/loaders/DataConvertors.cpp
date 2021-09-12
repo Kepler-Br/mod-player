@@ -56,17 +56,13 @@ void convertFromS16(const uint8_t *value, float &target) {
 #pragma region convert to
 
 void convertToU8(const float &value, uint8_t *target) {
-  constexpr float maxSigned = 0x80f - 1.0f;
-
-  *target = (uint8_t)((value * maxSigned) + maxSigned);
+  *target = (uint8_t)((value * maxSigned8) + maxSigned8);
 }
 
 void convertToS8(const float &value, uint8_t *target) {
-  constexpr float maxSigned = 0x80 - 1;
-
   auto *convertedPointer = (int8_t *)target;
 
-  *convertedPointer = (int8_t)(value * maxSigned);
+  *convertedPointer = (int8_t)(value * maxSigned8);
 }
 
 void convertToU16(const float &value, uint8_t *target) {

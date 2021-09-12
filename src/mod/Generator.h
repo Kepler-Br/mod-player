@@ -15,8 +15,40 @@ enum class GeneratorState {
 
 template <class T>
 struct ChangedValue {
-  T &oldValue;
-  T &newValue;
+  T oldValue;
+  T newValue;
+
+  ChangedValue(T inOldValue, T inNewValue)
+      : oldValue(inOldValue), newValue(inNewValue) {}
+
+  explicit ChangedValue(T value) : oldValue(value), newValue(value) {}
+};
+
+struct ChangedRowEvent {
+  ChangedValue<size_t> row;
+  ChangedValue<size_t> order;
+  ChangedValue<size_t> pattern;
+
+  ChangedRowEvent(ChangedValue<size_t> inRow, ChangedValue<size_t> inOrder,
+                  ChangedValue<size_t> inPattern)
+      : row(inRow), order(inOrder), pattern(inPattern) {}
+};
+
+struct ChangedOrderEvent {
+  ChangedValue<size_t> row;
+  ChangedValue<size_t> order;
+  ChangedValue<size_t> pattern;
+
+  ChangedOrderEvent(ChangedValue<size_t> inRow, ChangedValue<size_t> inOrder,
+                    ChangedValue<size_t> inPattern)
+      : row(inRow), order(inOrder), pattern(inPattern) {}
+};
+
+struct ChangedStateEvent {
+  ChangedValue<GeneratorState> state;
+
+  explicit ChangedStateEvent(ChangedValue<GeneratorState> inState)
+      : state(inState) {}
 };
 
 class Generator {
@@ -34,18 +66,19 @@ class Generator {
   std::vector<float> _buffer;
 
   bool _rowPlayed = false;
-  size_t _timePassed = 0;
-  size_t _timePerRow = 440 * 6;
+  size_t _timePassed = 0.0f;
+  size_t _timePerRow = 440.0f * 6.0f;
   size_t _currentOrderIndex = 0;
   size_t _currentRowIndex = 0;
   size_t _bytesInEncoding = 1;
   float _volume = 1.0f;
   float _frequency = 22050.0f;
 
-  std::function<void(Generator &, size_t, size_t)> _nextRowCallback = nullptr;
-  std::function<void(Generator &, size_t, size_t, size_t, size_t)>
-      _nextOrderCallback = nullptr;
-  std::function<void(Generator &, GeneratorState, GeneratorState)>
+  std::function<void(Generator &, ChangedRowEvent event)> _nextRowCallback =
+      nullptr;
+  std::function<void(Generator &, ChangedOrderEvent event)> _nextOrderCallback =
+      nullptr;
+  std::function<void(Generator &, ChangedStateEvent event)>
       _stateChangedCallback = nullptr;
 
   GeneratorState _generatorState = GeneratorState::Playing;
@@ -64,11 +97,15 @@ class Generator {
 
   void resetState();
 
+  size_t calculateTimePerRow(float frequency, float speed);
+
   void _setState(GeneratorState newState);
 
   void _setRowIndex(size_t newRowIndex);
 
   void _setOrderIndex(size_t newOrderIndex);
+
+  void _setOrderAndRowIndex(size_t newOrderIndex, size_t newRowIndex);
 
  public:
   /**
@@ -84,24 +121,20 @@ class Generator {
    * @param callback If nullptr, then callback would not be called.
    */
   void setNextRowCallback(
-      std::function<void(Generator &, size_t oldIndex, size_t newIndex)>
-          callback);
+      std::function<void(Generator &, ChangedRowEvent event)> callback);
 
   /**
    * @param callback If nullptr, then callback would not be called.
    */
   void setNextOrderCallback(
-      std::function<void(mod::Generator &generator, size_t oldOrderIndex,
-                         size_t newOrderIndex, size_t oldPatternIndex,
-                         size_t newPatternIndex)>
+      std::function<void(mod::Generator &generator, ChangedOrderEvent event)>
           callback);
 
   /**
    * @param callback If nullptr, then callback would not be called.
    */
   void setStateChangedCallback(
-      std::function<void(Generator &, GeneratorState oldState,
-                         GeneratorState newState)>
+      std::function<void(Generator &, ChangedStateEvent event)>
           callback);
 
   void setVolume(float volume);

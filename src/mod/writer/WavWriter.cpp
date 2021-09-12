@@ -45,7 +45,7 @@ void WavWriter::write(Generator& generator, std::ostream& stream) {
 
   generator.restart();
 
-  std::vector<uint8_t> buffer(440 * 6);
+  std::vector<uint8_t> buffer(1024);
 
   while(generator.getState() != GeneratorState::Paused) {
     generator.generate(buffer.data(), buffer.size());
@@ -60,4 +60,5 @@ void WavWriter::write(Generator& generator, std::ostream& stream) {
   stream.seekp(0, std::ios_base::beg);
   this->writeHeader(stream, dataWrote);
 }
+
 }

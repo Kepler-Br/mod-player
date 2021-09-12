@@ -22,8 +22,9 @@ bool initAudio(void *userdata) {
 
   /* Set the audio format */
   wanted.freq = (int)(11025 * 2.0f);
+  wanted.freq = 48000;
 //  wanted.freq = 8353;
-  wanted.format = AUDIO_S8;
+  wanted.format = AUDIO_U8;
   wanted.channels = 1;   /* 1 = mono, 2 = stereo */
   wanted.samples = 1024; /* Good low-latency value for callback */
   wanted.callback = fill_audio;
@@ -39,27 +40,26 @@ bool initAudio(void *userdata) {
 
 void setCallbacks(mod::Generator &generator) {
   generator.setNextRowCallback(
-      [](mod::Generator &generator, size_t oldIndex, size_t newIndex) {
-        const mod::Row &currentRow = generator.getCurrentRow();
+      [](mod::Generator &caller, const mod::ChangedRowEvent &event) {
+        const mod::Row &currentRow = caller.getCurrentRow();
+        const mod::Row &nextRow = caller.getRow(event.row.newValue);
 
-        std::cout << std::setfill('0') << std::setw(2) << std::hex << oldIndex
+        std::cout << std::setfill('0') << std::setw(2) << std::hex << event.row.newValue
                   << std::dec << " ";
-        std::cout << mod::InfoString::fancyRow(currentRow) << std::endl;
+        std::cout << mod::InfoString::fancyRow(nextRow) << std::endl;
       });
 
   generator.setNextOrderCallback(
-      [](mod::Generator &generator, size_t oldOrderIndex, size_t newOrderIndex,
-         size_t oldPatternIndex, size_t newPatternIndex) {
-        std::cout << "Pattern: " << newPatternIndex
-                  << "; Order: " << newOrderIndex << std::endl;
+      [](mod::Generator &caller, const mod::ChangedOrderEvent &event) {
+        std::cout << "Pattern: " << event.pattern.newValue
+                  << "; Order: " << event.order.newValue << std::endl;
       });
 
-  generator.setStateChangedCallback([](mod::Generator &generator,
-                                       mod::GeneratorState oldState,
-                                       mod::GeneratorState newState) {
-    if (newState == mod::GeneratorState::Playing) {
+  generator.setStateChangedCallback([](mod::Generator &caller,
+                                       const mod::ChangedStateEvent &event) {
+    if (event.state.newValue == mod::GeneratorState::Playing) {
       std::cout << "Playing\n";
-    } else if (newState == mod::GeneratorState::Paused) {
+    } else if (event.state.newValue == mod::GeneratorState::Paused) {
       std::cout << "Paused\n";
     }
   });
@@ -67,40 +67,42 @@ void setCallbacks(mod::Generator &generator) {
 
 int main() {
   using namespace mod;
-  // TODO: Make use of new templated struct "ChangedValue"
   // TODO: comandr.mod + 11025.0f * 0.4f not working
   // TODO: Speed change not affected by frequency
-  // TODO: Add to generator setter for order and row simultaneously
+  // TODO: Freq 48000 and buffer 1024*16 is infinity loop
+  // TODO: Freq 48000 some instruments anomalies
+  // TODO: Change time per row to float
 
   std::shared_ptr<TrackerLoader> trackerLoader = std::make_shared<ModLoader>();
 
-  std::shared_ptr<Mod> serializedMod = trackerLoader->load("ignore-mods/thradd.mod");
+  std::shared_ptr<Mod> serializedMod = trackerLoader->load("ignore-mods/pkunk.mod");
 
   std::cout << mod::InfoString::toString(*serializedMod) << "\n";
 
-  mod::Generator generator(serializedMod, mod::Encoding::Signed8);
+  mod::Generator generator(serializedMod, mod::Encoding::Unsigned8);
   generator.setFrequency(11025.0f * 2.0f);
+  generator.setFrequency(48000.0f);
 //  generator.setFrequency(8363.0f);
 //  generator.setFrequency(8550.0f);
 //  generator.setFrequency(8353.0f);
-  generator.setVolume(4.0f);
+  generator.setVolume(1.0f);
 
   setCallbacks(generator);
 
-  generator.start();
+  generator.restart();
 
-  //  generator.setCurrentOrder(0);
+//    generator.setCurrentOrder(8);
   //  generator.setCurrentRow(0x35);
   //  generator.solo(3);
   //  generator.solo(2);
 
-  //  mod::WavWriter writer;
-  //
-  //  std::ofstream stream("output.wav");
-  //
-  //  writer.write(generator, stream);
-  //
-  //  stream.close();
+//    mod::WavWriter writer;
+//
+//    std::ofstream stream("output.wav");
+//
+//    writer.write(generator, stream);
+//
+//    stream.close();
 
   if (!initAudio(&generator)) {
     return -1;
