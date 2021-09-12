@@ -21,6 +21,7 @@ add_executable(
         src/mod/Sample.cpp
         src/mod/writer/RawWriter.cpp
         src/mod/writer/WavWriter.cpp
+        src/MemoryBuffer.cpp
 
         src/exceptions/BadStateException.h
         src/MemoryBuffer.h
