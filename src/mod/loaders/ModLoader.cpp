@@ -2,6 +2,7 @@
 
 #include <fmt/format.h>
 
+#include <array>
 #include <fstream>
 
 #include "DataConvertors.h"
@@ -134,7 +135,8 @@ size_t ModLoader::getChannels(std::istream &stream) {
     throw std::runtime_error("File stream gone bad.");
   }
 
-  if (std::strcmp(type.data(), "M.K.") == 0 || std::strcmp(type.data(), "FLT4") == 0) {
+  if (std::strcmp(type.data(), "M.K.") == 0 ||
+      std::strcmp(type.data(), "FLT4") == 0) {
     return 4;
   } else if (std::strcmp(type.data(), "6CHN") == 0) {
     return 6;
@@ -148,7 +150,8 @@ size_t ModLoader::getChannels(std::istream &stream) {
     }
   } catch (const std::invalid_argument &) {
     // Will throw anyway, but sonar won't shut up about ignored exception.
-    throw std::runtime_error(fmt::format("Unknown mod type format: '{}'", type));
+    throw std::runtime_error(
+        fmt::format("Unknown mod type format: '{}'", type));
   }
 
   throw std::runtime_error(fmt::format("Unknown mod type format: '{}'", type));
@@ -311,7 +314,8 @@ std::shared_ptr<Mod> ModLoader::load(std::istream &stream) {
   }
   patternsCount++;
 
-  std::vector<Pattern> patterns = ModLoader::readPatterns(stream, patternsCount);
+  std::vector<Pattern> patterns =
+      ModLoader::readPatterns(stream, patternsCount);
 
   ModLoader::readSamplesAudioData(stream, samples, Encoding::Signed8);
 

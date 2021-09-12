@@ -14,6 +14,8 @@
 #include "mod/writer/WavWriter.h"
 #include "mod/loaders/TrackerLoader.h"
 #include "mod/loaders/ModLoader.h"
+#include "../ignore-mods/arilou.mod.h"
+#include "MemoryStream.h"
 
 extern void fill_audio(void *udata, Uint8 *stream, int len);
 
@@ -22,7 +24,8 @@ bool initAudio(void *userdata) {
 
   /* Set the audio format */
   wanted.freq = (int)(11025 * 2.0f);
-  wanted.freq = 48000;
+//  wanted.freq = 48000;
+//  wanted.freq = 48000;
 //  wanted.freq = 8353;
   wanted.format = AUDIO_U8;
   wanted.channels = 1;   /* 1 = mono, 2 = stereo */
@@ -65,23 +68,36 @@ void setCallbacks(mod::Generator &generator) {
   });
 }
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+
+void emMainLoop() {
+
+}
+#endif
+
+
+
 int main() {
   using namespace mod;
   // TODO: comandr.mod + 11025.0f * 0.4f not working
   // TODO: Speed change not affected by frequency
   // TODO: Freq 48000 and buffer 1024*16 is infinity loop
-  // TODO: Freq 48000 some instruments anomalies
+  // TODO: Freq 48000 some instruments anomalies on pkunk.mod, order 8
   // TODO: Change time per row to float
 
   std::shared_ptr<TrackerLoader> trackerLoader = std::make_shared<ModLoader>();
 
-  std::shared_ptr<Mod> serializedMod = trackerLoader->load("ignore-mods/pkunk.mod");
+  MemoryStream memoryStream((char *)modArray, modSize);
+
+//  std::shared_ptr<Mod> serializedMod = trackerLoader->load("ignore-mods/pkunk.mod");
+  std::shared_ptr<Mod> serializedMod = trackerLoader->load(memoryStream);
 
   std::cout << mod::InfoString::toString(*serializedMod) << "\n";
 
   mod::Generator generator(serializedMod, mod::Encoding::Unsigned8);
   generator.setFrequency(11025.0f * 2.0f);
-  generator.setFrequency(48000.0f);
+//  generator.setFrequency(48000.0f);
 //  generator.setFrequency(8363.0f);
 //  generator.setFrequency(8550.0f);
 //  generator.setFrequency(8353.0f);
@@ -109,10 +125,14 @@ int main() {
   }
 
   SDL_PauseAudio(0);
+#ifdef __EMSCRIPTEN__
+  emscripten_set_main_loop(&emMainLoop, 60, true);
+#else
   while (generator.getState() == mod::GeneratorState::Playing) {
     SDL_Delay(1000);
   }
   SDL_CloseAudio();
+#endif
 
   return 0;
 }
