@@ -41,6 +41,8 @@ add_executable(
         src/mod/writer/ModWriter.h
         src/mod/writer/RawWriter.h
         src/mod/writer/WavWriter.h
+
+        ignore-mods/arilou.mod.h
 )
 
 target_include_directories(
