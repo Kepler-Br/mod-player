@@ -90,6 +90,7 @@ std::string InfoString::fancyRow(const Row& row) {
                              colors.green + ".." + colors.magenta + "." +
                              colors.yellow + ".." + colors.reset;
   const std::streampos fillerLen = (std::streampos)filler.size();
+  const auto originalPeriodsSize = sizeof(originalPeriods) / sizeof(int);
 
   for (const auto& note : row.getNotes()) {
     std::streampos cur = stringstream.tellp();
@@ -97,7 +98,7 @@ std::string InfoString::fancyRow(const Row& row) {
     if (note.sampleIndex != 0) {
       std::string noteString = "???";
 
-      for (size_t i = 0; i < sizeof(originalPeriods); i++) {
+      for (size_t i = 0; i < originalPeriodsSize; i++) {
         if (originalPeriods[i] == note.samplePeriodFrequency) {
           noteString = intToNote(i % totalNotes) + (char)('0' + (i / 12) + 2);
           break;
